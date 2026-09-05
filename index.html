@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FrigoPlan - Gestor Familiar en Tiempo Real</title>
+    <title>FrigoPlan - Gestor Familiar</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2e7d32">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header class="app-header">
@@ -17,8 +14,7 @@
             <span class="logo-icon">🥗</span>
             <h1>FrigoPlan</h1>
         </div>
-        <p class="subtitle">Sincronización familiar en tiempo real y Lista de la Compra</p>
-        <div id="sync-status" class="sync-badge">🔴 Modo Local (Configura Firebase para Tiempo Real)</div>
+        <button onclick="resetApp()" class="btn btn-sm btn-danger" style="margin-top: 10px; background: rgba(0,0,0,0.2);">🔄 Resetear Datos</button>
     </header>
 
     <main class="container">
@@ -33,20 +29,13 @@
                         <span class="badge-day">HOY</span>
                         <div class="summary-details">
                             <div class="clickable-dish-row" onclick="openMainChangeModal('comida')">
-                                <span>☀️ <strong>Comida:</strong> <span id="today-lunch">Sin planificar</span></span>
-                                <button type="button" class="btn-edit-inline">✏️ Cambiar</button>
+                                <span>☀️ <strong>Comida:</strong> <span id="today-lunch"></span></span>
+                                <button type="button" class="btn-edit-inline">✏️</button>
                             </div>
                             <div class="clickable-dish-row" onclick="openMainChangeModal('cena')">
-                                <span>🌙 <strong>Cena:</strong> <span id="today-dinner">Sin planificar</span></span>
-                                <button type="button" class="btn-edit-inline">✏️ Cambiar</button>
+                                <span>🌙 <strong>Cena:</strong> <span id="today-dinner"></span></span>
+                                <button type="button" class="btn-edit-inline">✏️</button>
                             </div>
-                        </div>
-                    </div>
-                    <div class="day-summary-box tomorrow-box">
-                        <span class="badge-day">MAÑANA</span>
-                        <div class="summary-details">
-                            <p style="margin-top: 6px;">☀️ <strong>Comida:</strong> <span id="tomorrow-lunch">Sin planificar</span></p>
-                            <p style="margin-top: 6px;">🌙 <strong>Cena:</strong> <span id="tomorrow-dinner">Sin planificar</span></p>
                         </div>
                     </div>
                 </div>
@@ -54,23 +43,21 @@
 
             <section class="daily-summary-card shopping-preview-card">
                 <div class="section-action-header">
-                    <h2>🛒 Lista de la Compra</h2>
-                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteSelectedShoppingItems()">🗑️ Eliminar</button>
+                    <h2>🛒 Compra Rápida</h2>
                 </div>
                 <form onsubmit="addShoppingItem(event)" class="add-shopping-bar-mini">
                     <input type="text" id="shopping-input-main" placeholder="Añadir producto..." required>
-                    <button type="submit" class="btn btn-primary btn-sm">➕ Añadir</button>
+                    <button type="submit" class="btn btn-primary btn-sm">➕</button>
                 </form>
                 <div id="shopping-list-main-preview" class="shopping-preview-list"></div>
             </section>
         </div>
 
         <nav class="tab-nav">
-            <button class="tab-btn active" onclick="switchTab('freezer')">🧊 Congelador (<span id="freezer-count">0</span>)</button>
+            <button class="tab-btn active" onclick="switchTab('freezer')">🧊 Congelador</button>
             <button class="tab-btn" onclick="switchTab('planner')">📅 Plan Semanal</button>
             <button class="tab-btn" onclick="switchTab('recipes')">📖 Recetas</button>
-            <button class="tab-btn" onclick="switchTab('shopping')">🛒 Lista Compra (<span id="shopping-count">0</span>)</button>
-            <button class="tab-btn" onclick="switchTab('history')">📜 Resumen</button>
+            <button class="tab-btn" onclick="switchTab('shopping')">🛒 Compra</button>
         </nav>
 
         <section id="tab-freezer" class="tab-content active">
@@ -78,17 +65,12 @@
                 <h2>Alimentos en Congelador</h2>
                 <button class="btn btn-primary" onclick="openAddModal()">➕ Añadir Guiso</button>
             </div>
-            <p class="section-desc">Muestra los guisos almacenados con raciones disponibles.</p>
             <div id="stock-grid" class="cards-grid"></div>
-            <div id="empty-stock-msg" class="empty-state hidden">
-                <div class="empty-icon">🥦</div>
-                <h3>El congelador está vacío</h3>
-            </div>
+            <div id="empty-stock-msg" class="empty-state hidden"><h3>El congelador está vacío</h3></div>
         </section>
 
         <section id="tab-planner" class="tab-content">
             <h2>Planificador Semanal</h2>
-            <p class="section-desc">Haz clic en cualquier comida o cena para asignar una receta.</p>
             <div id="week-planner-container" class="planner-days"></div>
         </section>
 
@@ -102,104 +84,53 @@
 
         <section id="tab-shopping" class="tab-content">
             <div class="section-action-header">
-                <h2>🛒 Lista de la Compra Compartida</h2>
-                <button class="btn btn-danger" onclick="deleteSelectedShoppingItems()">🗑️ Eliminar marcados</button>
+                <h2>🛒 Lista Completa</h2>
+                <button class="btn btn-danger" onclick="deleteSelectedShoppingItems()">🗑️ Borrar marcados</button>
             </div>
             <form onsubmit="addShoppingItem(event)" class="add-shopping-bar-mini" style="margin-bottom:16px;">
-                <input type="text" id="shopping-input-tab" placeholder="Ej: Leche, Huevos, Tomates..." required>
-                <button type="submit" class="btn btn-primary">➕ Añadir</button>
+                <input type="text" id="shopping-input-tab" placeholder="Añadir producto..." required>
+                <button type="submit" class="btn btn-primary">➕</button>
             </form>
             <div id="shopping-list-container" class="shopping-list-grid"></div>
-            <div id="empty-shopping-msg" class="empty-state hidden">
-                <div class="empty-icon">🛒</div>
-                <h3>La lista de la compra está vacía</h3>
-            </div>
-        </section>
-
-        <section id="tab-history" class="tab-content">
-            <h2>Resumen General</h2>
-            <p>Monitoreo global de stock y consumo semanal.</p>
         </section>
     </main>
 
+    <!-- Modals (Simplified for robustness) -->
     <div id="plan-modal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>Seleccionar Alimento</h3>
-                <span class="close-btn" onclick="closePlanModal()">&times;</span>
-            </div>
+            <div class="modal-header"><h3>Seleccionar Alimento</h3><span class="close-btn" onclick="closeModals()">&times;</span></div>
             <form onsubmit="savePlannerChoice(event)">
                 <input type="hidden" id="plan-day">
                 <input type="hidden" id="plan-type">
-                <div class="form-group">
-                    <label for="plan-dish-select">Receta:</label>
-                    <select id="plan-dish-select" required></select>
-                </div>
-                <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button type="button" class="btn btn-secondary" onclick="closePlanModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
+                <div class="form-group"><select id="plan-dish-select" required></select></div>
+                <button type="submit" class="btn btn-primary" style="width:100%">Guardar</button>
             </form>
         </div>
     </div>
 
     <div id="add-recipe-modal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>📖 Añadir Nueva Receta</h3>
-                <span class="close-btn" onclick="closeAddRecipeModal()">&times;</span>
-            </div>
+            <div class="modal-header"><h3>📖 Nueva Receta</h3><span class="close-btn" onclick="closeModals()">&times;</span></div>
             <form onsubmit="saveRecipeForm(event)">
+                <div class="form-group"><input type="text" id="recipe-name" placeholder="Nombre" required></div>
                 <div class="form-group">
-                    <label>Nombre:</label>
-                    <input type="text" id="recipe-name" required>
-                </div>
-                <div class="form-group">
-                    <label>Categoría:</label>
                     <select id="recipe-category" required>
-                        <option value="Comida">Comida</option>
-                        <option value="Cena">Cena</option>
+                        <option value="Comida">Comida</option><option value="Cena">Cena</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label style="display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" id="recipe-freezable" style="width:auto;"> ¿Es congelable?
-                    </label>
-                </div>
-                <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddRecipeModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
+                <div class="form-group"><label><input type="checkbox" id="recipe-freezable"> ¿Es congelable?</label></div>
+                <button type="submit" class="btn btn-primary" style="width:100%">Guardar</button>
             </form>
         </div>
     </div>
 
     <div id="add-modal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>🍲 Registrar en Congelador</h3>
-                <span class="close-btn" onclick="closeAddModal()">&times;</span>
-            </div>
+            <div class="modal-header"><h3>🍲 Añadir al Congelador</h3><span class="close-btn" onclick="closeModals()">&times;</span></div>
             <form onsubmit="saveStockForm(event)">
-                <div class="form-group">
-                    <label>Categoría:</label>
-                    <select id="dish-category" onchange="updateDishOptions()" required>
-                        <option value="Comida">Comidas</option>
-                        <option value="Cena">Cenas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Plato:</label>
-                    <select id="dish-name" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Raciones:</label>
-                    <input type="number" id="dish-servings" min="1" max="50" value="6" required>
-                </div>
-                <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
+                <div class="form-group"><select id="dish-name" required></select></div>
+                <div class="form-group"><input type="number" id="dish-servings" placeholder="Nº de raciones" min="1" value="4" required></div>
+                <button type="submit" class="btn btn-primary" style="width:100%">Añadir</button>
             </form>
         </div>
     </div>
