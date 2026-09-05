@@ -1,5 +1,4 @@
 
-// ESTADO POR DEFECTO A PRUEBA DE FALLOS
 const defaultState = {
     recipes: [
         { id: '1', name: 'Alubias', category: 'Comida', freezable: true },
@@ -8,31 +7,49 @@ const defaultState = {
         { id: '4', name: 'Tortilla Francesa', category: 'Cena', freezable: false }
     ],
     stock: [
-        { id: 's1', name: 'Alubias', servings: 4 },
+        { id: 's1', name: 'Alubias', servings: 2 },
         { id: 's2', name: 'Lentejas', servings: 2 }
     ],
     planner: {
-        'lunes_comida': 'Alubias', 'lunes_cena': 'Tortilla Francesa'
+        // Estructura: { 'lunes_comida': { dish: 'Alubias', servings: 1 }, ... }
     },
     shoppingList: [
         { id: 'sh1', name: 'Huevos', checked: false }
     ]
 };
 
+const daysOfWeek = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+const dayNamesMap = {
+    'lunes': 'Lunes', 'martes': 'Martes', 'miércoles': 'Miércoles',
+    'jueves': 'Jueves', 'viernes': 'Viernes', 'sábado': 'Sábado', 'domingo': 'Domingo'
+};
+const mealTypesMap = { 'comida': 'Comida', 'cena': 'Cena' };
+
 let state = JSON.parse(JSON.stringify(defaultState));
 
 function init() {
-    const local = localStorage.getItem('frigoplan_v2'); // Nueva clave para evitar conflictos pasados
+    const local = localStorage.getItem('frigoplan_v3');
     if (local) {
         try {
             const parsed = JSON.parse(local);
-            // Asignación segura con fallback para evitar arrays rotos (causa del problema anterior)
             state.recipes = Array.isArray(parsed.recipes) ? parsed.recipes : defaultState.recipes;
             state.stock = Array.isArray(parsed.stock) ? parsed.stock : defaultState.stock;
-            state.planner = parsed.planner || defaultState.planner;
             state.shoppingList = Array.isArray(parsed.shoppingList) ? parsed.shoppingList : defaultState.shoppingList;
+            
+            // Migrar planner antiguo (strings) a objeto con raciones si fuera necesario
+            state.planner = {};
+            if (parsed.planner) {
+                for (let key in parsed.planner) {
+                    let val = parsed.planner[key];
+                    if (typeof val === 'string' && val) {
+                        state.planner[key] = { dish: val, servings: 1 };
+                    } else if (val && typeof val === 'object' && val.dish) {
+                        state.planner[key] = val;
+                    }
+                }
+            }
         } catch(e) {
-            console.error("Datos corruptos, cargando defecto.");
+            console.error("Error al cargar datos", e);
             state = JSON.parse(JSON.stringify(defaultState));
         }
     }
@@ -40,21 +57,97 @@ function init() {
 }
 
 function saveData() {
-    localStorage.setItem('frigoplan_v2', JSON.stringify(state));
+    localStorage.setItem('frigoplan_v3', JSON.stringify(state));
     renderAll();
 }
 
 function resetApp() {
     if(confirm("¿Borrar todos los datos y empezar de cero?")) {
-        localStorage.removeItem('frigoplan_v2');
-        localStorage.removeItem('frigoplan_state'); // Limpiar la versión vieja por si acaso
+        localStorage.removeItem('frigoplan_v3');
         state = JSON.parse(JSON.stringify(defaultState));
         saveData();
     }
 }
 
 function renderAll() {
-    renderMainSummary(); renderFreezer(); renderPlanner(); renderRecipes(); renderShoppingList();
+    renderMainSummary(); 
+    renderFreezer(); 
+    renderPlanner(); 
+    renderRecipes(); 
+    renderShoppingList();
+    checkGlobalStockAlerts();
+}
+
+// Cálculo del stock acumulado consumido por plato en la semana
+function getConsumptionSummary() {
+    let consumption = {}; // { 'Alubias': total_rations_planned }
+    for (let key in state.planner) {
+        let entry = state.planner[key];
+        if (entry && entry.dish) {
+            let dish = entry.dish;
+            let qty = parseInt(entry.servings) || 1;
+            consumption[dish] = (consumption[dish] || 0) + qty;
+        }
+    }
+    return consumption;
+}
+
+// Valida si un plato se queda sin stock en algún día concreto y devuelve detalles
+function getStockDeficits() {
+    // Ordenamos los días cronológicamente
+    let slotList = [];
+    daysOfWeek.forEach(day => {
+        ['comida', 'cena'].forEach(type => {
+            slotList.push({ day, type, key: `${day}_${type}` });
+        });
+    });
+
+    let runningStock = {};
+    state.stock.forEach(s => {
+        runningStock[s.name] = s.servings;
+    });
+
+    let deficits = []; // Lista de alertas detalladas
+
+    slotList.forEach(slot => {
+        let entry = state.planner[slot.key];
+        if (entry && entry.dish) {
+            let dish = entry.dish;
+            let needed = parseInt(entry.servings) || 1;
+            let currentStock = runningStock[dish] !== undefined ? runningStock[dish] : 0;
+
+            if (needed > currentStock) {
+                deficits.exports = true;
+                deficits.push({
+                    dish: dish,
+                    day: dayNamesMap[slot.day],
+                    mealType: mealTypesMap[slot.type],
+                    available: Math.max(0, currentStock),
+                    requested: needed
+                });
+                runningStock[dish] = 0; // Se agota
+            } else {
+                runningStock[dish] = currentStock - needed;
+            }
+        }
+    });
+
+    return deficits;
+}
+
+function checkGlobalStockAlerts() {
+    const alertBox = document.getElementById('global-stock-alert');
+    let deficits = getStockDeficits();
+
+    if (deficits.length > 0) {
+        let messages = deficits.map(d => 
+            `⚠️ El plato <strong>${d.dish}</strong> planificado para el <strong>${d.day} (${d.mealType})</strong> no tiene suficiente stock (Disponibles: ${d.available}, Pedidas: ${d.requested}).`
+        );
+        alertBox.innerHTML = messages.join('<br>');
+        alertBox.classList.remove('hidden');
+    } else {
+        alertBox.classList.add('hidden');
+    }
 }
 
 function switchTab(tabId) {
@@ -65,8 +158,11 @@ function switchTab(tabId) {
 }
 
 function renderMainSummary() {
-    document.getElementById('today-lunch').innerText = state.planner['lunes_comida'] || 'Sin planificar';
-    document.getElementById('today-dinner').innerText = state.planner['lunes_cena'] || 'Sin planificar';
+    let lLunch = state.planner['lunes_comida'];
+    let lDinner = state.planner['lunes_cena'];
+    
+    document.getElementById('today-lunch').innerText = lLunch ? `${lLunch.dish} (${lLunch.servings} r.)` : 'Sin planificar';
+    document.getElementById('today-dinner').innerText = lDinner ? `${lDinner.dish} (${lDinner.servings} r.)` : 'Sin planificar';
 }
 
 function renderFreezer() {
@@ -78,13 +174,20 @@ function renderFreezer() {
     }
     document.getElementById('empty-stock-msg').classList.add('hidden');
     
+    let consumption = getConsumptionSummary();
+
     active.forEach(item => {
+        let plannedForThis = consumption[item.name] || 0;
+        let realRemaining = item.servings - plannedForThis;
+
         const div = document.createElement('div');
         div.className = 'card';
         div.innerHTML = `
             <h3>🍲 ${item.name}</h3>
-            <p style="margin: 10px 0; font-size:1.2rem;">Raciones: <strong>${item.servings}</strong></p>
-            <div style="display:flex; gap:8px;">
+            <p style="margin: 6px 0; font-size:1.1rem;">Stock real: <strong>${item.servings} r.</strong></p>
+            <p style="margin: 6px 0; font-size:0.9rem; color:#666;">Planificado semana: <strong>-${plannedForThis} r.</strong></p>
+            <p style="margin: 6px 0; font-size:0.95rem; color:${realRemaining < 0 ? '#d32f2f' : '#2e7d32'};">Disponible neto: <strong>${realRemaining} r.</strong></p>
+            <div style="display:flex; gap:8px; margin-top:10px;">
                 <button class="btn btn-sm" style="background:#eee" onclick="adjustStock('${item.id}', -1)">-1</button>
                 <button class="btn btn-sm" style="background:#eee" onclick="adjustStock('${item.id}', 1)">+1</button>
             </div>
@@ -101,19 +204,33 @@ function adjustStock(id, diff) {
 function renderPlanner() {
     const container = document.getElementById('week-planner-container');
     container.innerHTML = '';
-    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     
-    days.forEach(day => {
-        const d = day.toLowerCase();
+    let deficits = getStockDeficits();
+    let deficitMap = {};
+    deficits.forEach(d => {
+        deficitMap[`${d.day}_${d.mealType}`] = true;
+    });
+
+    daysOfWeek.forEach(dayKey => {
+        let dayName = dayNamesMap[dayKey];
+        let lunchEntry = state.planner[`${dayKey}_comida`];
+        let dinnerEntry = state.planner[`${dayKey}_cena`];
+
+        let lunchText = lunchEntry ? `${lunchEntry.dish} (${lunchEntry.servings} r.)` : '- Vacío -';
+        let dinnerText = dinnerEntry ? `${dinnerEntry.dish} (${dinnerEntry.servings} r.)` : '- Vacío -';
+
+        let lunchHasDeficit = deficitMap[`${dayName}_Comida`] ? 'stock-warning' : '';
+        let dinnerHasDeficit = deficitMap[`${dayName}_Cena`] ? 'stock-warning' : '';
+
         container.innerHTML += `
             <div class="planner-day-card">
-                <h3>${day}</h3>
+                <h3>${dayName}</h3>
                 <div class="planner-meals-grid">
-                    <div class="meal-slot" onclick="openPlanModal('${d}', 'comida')">
-                        <small>☀️ Comida</small><div><strong>${state.planner[d+'_comida'] || '- Vacío -'}</strong></div>
+                    <div class="meal-slot ${lunchHasDeficit}" onclick="openPlanModal('${dayKey}', 'comida')">
+                        <small>☀️ Comida</small><div><strong>${lunchText}</strong></div>
                     </div>
-                    <div class="meal-slot" onclick="openPlanModal('${d}', 'cena')">
-                        <small>🌙 Cena</small><div><strong>${state.planner[d+'_cena'] || '- Vacío -'}</strong></div>
+                    <div class="meal-slot ${dinnerHasDeficit}" onclick="openPlanModal('${dayKey}', 'cena')">
+                        <small>🌙 Cena</small><div><strong>${dinnerText}</strong></div>
                     </div>
                 </div>
             </div>`;
@@ -171,18 +288,107 @@ function deleteSelectedShoppingItems() {
 function closeModals() { document.querySelectorAll('.modal').forEach(m => m.classList.remove('active')); }
 
 function openMainChangeModal(type) { openPlanModal('lunes', type); }
+
 function openPlanModal(day, type) {
-    document.getElementById('plan-day').value = day; document.getElementById('plan-type').value = type;
+    document.getElementById('plan-day').value = day; 
+    document.getElementById('plan-type').value = type;
+    
     const select = document.getElementById('plan-dish-select');
-    select.innerHTML = '<option value="">- Vaciar -</option>';
-    state.recipes.forEach(r => { select.innerHTML += `<option value="${r.name}">${r.name}</option>`; });
+    select.innerHTML = '<option value="">- Vaciar / Sin planificar -</option>';
+    state.recipes.forEach(r => { 
+        select.innerHTML += `<option value="${r.name}">${r.name} ${r.freezable ? '🧊' : ''}</option>`; 
+    });
+
+    const currentEntry = state.planner[`${day}_${type}`];
+    if (currentEntry) {
+        select.value = currentEntry.dish;
+        document.getElementById('plan-servings-input').value = currentEntry.servings || 1;
+    } else {
+        select.value = '';
+        document.getElementById('plan-servings-input').value = 1;
+    }
+
+    updateModalWarningPreview();
+    select.onchange = updateModalWarningPreview;
+    document.getElementById('plan-servings-input').oninput = updateModalWarningPreview;
+
     document.getElementById('plan-modal').classList.add('active');
 }
+
+// Simula en tiempo real dentro del modal si habrá stock suficiente teniendo en cuenta el orden semanal
+function updateModalWarningPreview() {
+    const day = document.getElementById('plan-day').value;
+    const type = document.getElementById('plan-type').value;
+    const dish = document.getElementById('plan-dish-select').value;
+    const servings = parseInt(document.getElementById('plan-servings-input').value) || 0;
+    const warningBox = document.getElementById('plan-modal-warning');
+
+    if (!dish || servings <= 0) {
+        warningBox.classList.add('hidden');
+        return;
+    }
+
+    // Copiamos temporalmente el planner actual aplicando este cambio simulado para ver si salta déficit
+    let tempPlanner = JSON.parse(JSON.stringify(state.planner));
+    if (dish === "") {
+        delete tempPlanner[`${day}_${type}`];
+    } else {
+        tempPlanner[`${day}_${type}`] = { dish, servings };
+    }
+
+    // Comprobamos déficits con este planner temporal
+    let slotList = [];
+    daysOfWeek.forEach(d => {
+        ['comida', 'cena'].forEach(t => {
+            slotList.push({ day: d, type: t, key: `${d}_${t}` });
+        });
+    });
+
+    let runningStock = {};
+    state.stock.forEach(s => { runningStock[s.name] = s.servings; });
+
+    let hasError = false;
+    let errorMsg = "";
+
+    for (let slot of slotList) {
+        let entry = tempPlanner[slot.key];
+        if (entry && entry.dish) {
+            let curStock = runningStock[entry.dish] !== undefined ? runningStock[entry.dish] : 0;
+            if (entry.servings > curStock) {
+                if (slot.day === day && slot.type === type) {
+                    hasError = true;
+                    errorMsg = `⚠️ ¡Atención! Estás planificando ${entry.servings} raciones de ${entry.dish}, pero el stock disponible neto en ese momento es de solo ${Math.max(0, curStock)} raciones.`;
+                }
+                runningStock[entry.dish] = 0;
+            } else {
+                runningStock[entry.dish] = curStock - entry.servings;
+            }
+        }
+    }
+
+    if (hasError) {
+        warningBox.innerHTML = errorMsg;
+        warningBox.classList.remove('hidden');
+    } else {
+        warningBox.classList.add('hidden');
+    }
+}
+
 function savePlannerChoice(e) {
     e.preventDefault();
-    const key = document.getElementById('plan-day').value + '_' + document.getElementById('plan-type').value;
-    state.planner[key] = document.getElementById('plan-dish-select').value;
-    saveData(); closeModals();
+    const day = document.getElementById('plan-day').value;
+    const type = document.getElementById('plan-type').value;
+    const dish = document.getElementById('plan-dish-select').value;
+    const servings = parseInt(document.getElementById('plan-servings-input').value) || 1;
+    const key = `${day}_${type}`;
+
+    if (!dish) {
+        delete state.planner[key];
+    } else {
+        state.planner[key] = { dish, servings };
+    }
+    saveData(); 
+    closeModals();
 }
 
 function openAddRecipeModal() { document.getElementById('add-recipe-modal').classList.add('active'); }

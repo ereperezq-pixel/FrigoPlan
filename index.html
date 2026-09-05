@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FrigoPlan - Gestor Familiar</title>
+    <title>FrigoPlan - Gestor Familiar Inteligente</title>
     <link rel="stylesheet" href="styles.css">
     <meta name="theme-color" content="#2e7d32">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
@@ -18,6 +18,8 @@
     </header>
 
     <main class="container">
+        <div id="global-stock-alert" class="global-stock-alert hidden"></div>
+
         <div class="main-dashboard-grid">
             <section class="daily-summary-card">
                 <div class="section-action-header">
@@ -26,7 +28,7 @@
                 </div>
                 <div class="daily-grid">
                     <div class="day-summary-box today-box">
-                        <span class="badge-day">HOY</span>
+                        <span class="badge-day">HOY (LUNES)</span>
                         <div class="summary-details">
                             <div class="clickable-dish-row" onclick="openMainChangeModal('comida')">
                                 <span>☀️ <strong>Comida:</strong> <span id="today-lunch"></span></span>
@@ -71,6 +73,7 @@
 
         <section id="tab-planner" class="tab-content">
             <h2>Planificador Semanal</h2>
+            <p style="font-size: 0.85rem; color: #666; margin-bottom: 12px;">Haz clic en cualquier comida o cena para asignar un plato y cuántas raciones gastará del congelador.</p>
             <div id="week-planner-container" class="planner-days"></div>
         </section>
 
@@ -95,15 +98,23 @@
         </section>
     </main>
 
-    <!-- Modals (Simplified for robustness) -->
+    <!-- Modals -->
     <div id="plan-modal" class="modal">
         <div class="modal-content">
-            <div class="modal-header"><h3>Seleccionar Alimento</h3><span class="close-btn" onclick="closeModals()">&times;</span></div>
+            <div class="modal-header"><h3>Planificar Plato</h3><span class="close-btn" onclick="closeModals()">&times;</span></div>
             <form onsubmit="savePlannerChoice(event)">
                 <input type="hidden" id="plan-day">
                 <input type="hidden" id="plan-type">
-                <div class="form-group"><select id="plan-dish-select" required></select></div>
-                <button type="submit" class="btn btn-primary" style="width:100%">Guardar</button>
+                <div class="form-group">
+                    <label>Receta / Plato:</label>
+                    <select id="plan-dish-select" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Raciones a gastar:</label>
+                    <input type="number" id="plan-servings-input" min="1" max="20" value="1" required>
+                </div>
+                <div id="plan-modal-warning" class="modal-warning hidden"></div>
+                <button type="submit" class="btn btn-primary" style="width:100%; margin-top:10px;">Guardar Planificación</button>
             </form>
         </div>
     </div>
