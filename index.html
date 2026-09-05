@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FrigoPlan - Gestor de Menú y Congelador Familiar</title>
+    <title>FrigoPlan - Gestor Familiar en Tiempo Real</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2e7d32">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs for Realtime Sync -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
     <header class="app-header">
@@ -16,27 +18,32 @@
             <span class="logo-icon">🥗</span>
             <h1>FrigoPlan</h1>
         </div>
-        <p class="subtitle">Organización de comidas y stock familiar</p>
+        <p class="subtitle">Sincronización familiar en tiempo real y Lista de la Compra</p>
+        <div id="sync-status" class="sync-badge">🔴 Modo Local (Configura Firebase)</div>
     </header>
 
     <main class="container">
         <!-- Banner de Avisos de Descongelación y Cocinado -->
-        <section id="alerts-section" class="alerts-container">
-            <!-- Avisos dinámicos -->
-        </section>
+        <section id="alerts-section" class="alerts-container"></section>
 
         <!-- Banner de Resumen Diario en Página Principal -->
         <section class="daily-summary-card">
             <div class="section-action-header">
-                <h2>🍴 Menú de Hoy y Mañana</h2>
-                <button class="btn btn-secondary btn-sm" onclick="openAddRecipeModal()">📖 Añadir Receta</button>
+                <h2>🍴 Menú del Día</h2>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openAddRecipeModal()">📖 Añadir Receta</button>
             </div>
             <div class="daily-grid">
                 <div class="day-summary-box today-box">
                     <span class="badge-day">HOY</span>
                     <div class="summary-details">
-                        <p onclick="openMainChangeModal('comida')" class="clickable-dish">☀️ <strong>Comida:</strong> <span id="today-lunch">Sin planificar</span> ✏️</p>
-                        <p onclick="openMainChangeModal('cena')" class="clickable-dish">🌙 <strong>Cena:</strong> <span id="today-dinner">Sin planificar</span> ✏️</p>
+                        <div class="clickable-dish-row" onclick="openMainChangeModal('comida')">
+                            <span>☀️ <strong>Comida:</strong> <span id="today-lunch">Sin planificar</span></span>
+                            <button type="button" class="btn-edit-inline">✏️ Cambiar</button>
+                        </div>
+                        <div class="clickable-dish-row" onclick="openMainChangeModal('cena')">
+                            <span>🌙 <strong>Cena:</strong> <span id="today-dinner">Sin planificar</span></span>
+                            <button type="button" class="btn-edit-inline">✏️ Cambiar</button>
+                        </div>
                     </div>
                 </div>
                 <div class="day-summary-box tomorrow-box">
@@ -49,24 +56,12 @@
             </div>
         </section>
 
-        <!-- Banner de Informe del Domingo -->
-        <section id="sunday-report-banner" class="report-banner hidden">
-            <div class="report-card">
-                <div class="report-header">
-                    <h2>📊 Informe Semanal de Cocina</h2>
-                    <span class="report-tag">Domingo +21:00h</span>
-                </div>
-                <p id="report-summary-text">Resumen de actividad de la semana finalizada:</p>
-                <div id="report-details" class="report-details"></div>
-                <button class="btn btn-secondary btn-sm" onclick="closeReportBanner()">Entendido / Cerrar</button>
-            </div>
-        </section>
-
         <!-- Navegación por pestañas -->
         <nav class="tab-nav">
             <button class="tab-btn active" onclick="switchTab('freezer')">🧊 Congelador (<span id="freezer-count">0</span>)</button>
             <button class="tab-btn" onclick="switchTab('planner')">📅 Plan Semanal</button>
             <button class="tab-btn" onclick="switchTab('recipes')">📖 Recetas</button>
+            <button class="tab-btn" onclick="switchTab('shopping')">🛒 Lista Compra (<span id="shopping-count">0</span>)</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Resumen</button>
         </nav>
 
@@ -76,17 +71,11 @@
                 <h2>Alimentos en Congelador</h2>
                 <button class="btn btn-primary" onclick="openAddModal()">➕ Añadir Guiso</button>
             </div>
-
             <p class="section-desc">Se muestran únicamente los guisos con raciones disponibles en stock.</p>
-
-            <div id="stock-grid" class="cards-grid">
-                <!-- Se rellena dinámicamente -->
-            </div>
-
+            <div id="stock-grid" class="cards-grid"></div>
             <div id="empty-stock-msg" class="empty-state hidden">
                 <div class="empty-icon">🥦</div>
                 <h3>¡El congelador está vacío!</h3>
-                <p>Presiona el botón "Añadir Guiso" cuando prepares tus comidas de la semana.</p>
             </div>
         </section>
 
@@ -94,10 +83,7 @@
         <section id="tab-planner" class="tab-content">
             <h2>Planificador Semanal</h2>
             <p class="section-desc">Haz clic en cualquier comida o cena para seleccionar el alimento del desplegable.</p>
-
-            <div id="week-planner-container" class="planner-days">
-                <!-- Días de la semana dinámicos -->
-            </div>
+            <div id="week-planner-container" class="planner-days"></div>
         </section>
 
         <!-- Vista 3: Catálogo de Recetas -->
@@ -107,19 +93,36 @@
                 <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Nueva Receta</button>
             </div>
             <p class="section-desc">Listado de recetas disponibles para el planificador y el congelador.</p>
-            <div id="recipes-list" class="cards-grid">
-                <!-- Lista de recetas -->
+            <div id="recipes-list" class="cards-grid"></div>
+        </section>
+
+        <!-- Vista 4: Lista de la Compra -->
+        <section id="tab-shopping" class="tab-content">
+            <div class="section-action-header">
+                <h2>🛒 Lista de la Compra Compartida</h2>
+                <button class="btn btn-danger" onclick="deleteSelectedShoppingItems()">🗑️ Eliminar productos seleccionados</button>
+            </div>
+            <p class="section-desc">Cualquier cambio se actualizará en tiempo real en los dispositivos de toda la familia.</p>
+            
+            <form id="add-shopping-form" onsubmit="addShoppingItem(event)" class="add-shopping-bar">
+                <input type="text" id="shopping-input" placeholder="Ej: Leche, Huevos, Tomates..." required>
+                <button type="submit" class="btn btn-primary">➕ Añadir</button>
+            </form>
+
+            <div id="shopping-list-container" class="shopping-list-grid"></div>
+            <div id="empty-shopping-msg" class="empty-state hidden">
+                <div class="empty-icon">🛒</div>
+                <h3>La lista de la compra está vacía</h3>
             </div>
         </section>
 
-        <!-- Vista 4: Informe / Historial -->
+        <!-- Vista 5: Informe / Historial -->
         <section id="tab-history" class="tab-content">
             <h2>Resumen y Estadísticas</h2>
             <div class="stats-card">
                 <h3>🍲 Raciones Consumidas esta semana</h3>
                 <div id="stats-total-consumed" class="stat-number">0</div>
             </div>
-            
             <div class="report-box">
                 <h3>📋 Estado General del Congelador</h3>
                 <div id="full-inventory-list" class="inventory-summary-list"></div>
@@ -127,43 +130,7 @@
         </section>
     </main>
 
-    <!-- Modal para Añadir/Cocinar Guiso al Congelador -->
-    <div id="add-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🍲 Registrar Guiso / Congelación</h3>
-                <span class="close-btn" onclick="closeAddModal()">&times;</span>
-            </div>
-            <form id="add-dish-form">
-                <div class="form-group">
-                    <label for="dish-category">Categoría:</label>
-                    <select id="dish-category" onchange="updateDishOptions()" required>
-                        <option value="Comida">Comidas</option>
-                        <option value="Cena">Cenas</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="dish-name">Plato / Receta:</label>
-                    <select id="dish-name" required>
-                        <!-- Opciones dinámicas según recetas -->
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="dish-servings">Número de raciones a congelar:</label>
-                    <input type="number" id="dish-servings" min="1" max="50" value="6" required>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar en Congelador</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal para Asignar Comida/Cena en el Planificador (Con Desplegable) -->
+    <!-- Modal para Seleccionar Alimento -->
     <div id="plan-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -173,18 +140,11 @@
             <form id="plan-dish-form">
                 <input type="hidden" id="plan-day">
                 <input type="hidden" id="plan-type">
-
                 <div class="form-group">
-                    <label for="plan-dish-select">Selecciona de la lista:</label>
-                    <select id="plan-dish-select" onchange="onPlanSelectChange()" required>
-                        <!-- Opciones dinámicas -->
-                    </select>
+                    <label for="plan-dish-select">Selecciona de la lista de recetas:</label>
+                    <select id="plan-dish-select" onchange="onPlanSelectChange()" required></select>
                 </div>
-
-                <div id="stock-availability-info" class="info-alert hidden">
-                    <!-- Información sobre stock -->
-                </div>
-
+                <div id="stock-availability-info" class="info-alert hidden"></div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closePlanModal()">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Fijar en el Plan</button>
@@ -202,27 +162,55 @@
             </div>
             <form id="add-recipe-form">
                 <div class="form-group">
-                    <label for="recipe-name">Nombre de la Receta:</label>
-                    <input type="text" id="recipe-name" placeholder="Ej: Lasaña de verduras, Crema de calabaza..." required>
+                    <label for="recipe-name">Nombre de la Receta / Guiso:</label>
+                    <input type="text" id="recipe-name" placeholder="Ej: Lasaña, Crema de verduras..." required>
                 </div>
-
                 <div class="form-group">
-                    <label for="recipe-category">Categoría principal:</label>
+                    <label for="recipe-category">Categoría:</label>
                     <select id="recipe-category" required>
                         <option value="Comida">Comida</option>
                         <option value="Cena">Cena</option>
                     </select>
                 </div>
-
                 <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="recipe-freezable"> ¿Es un guiso congelable?
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="recipe-freezable" style="width:auto;"> ¿Es un guiso congelable?
                     </label>
                 </div>
-
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeAddRecipeModal()">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar Receta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para Registrar Guiso -->
+    <div id="add-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🍲 Registrar Guiso / Congelación</h3>
+                <span class="close-btn" onclick="closeAddModal()">&times;</span>
+            </div>
+            <form id="add-dish-form">
+                <div class="form-group">
+                    <label for="dish-category">Categoría:</label>
+                    <select id="dish-category" onchange="updateDishOptions()" required>
+                        <option value="Comida">Comidas</option>
+                        <option value="Cena">Cenas</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="dish-name">Plato / Receta:</label>
+                    <select id="dish-name" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="dish-servings">Número de raciones a congelar:</label>
+                    <input type="number" id="dish-servings" min="1" max="50" value="6" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar en Congelador</button>
                 </div>
             </form>
         </div>
