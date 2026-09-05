@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ChefGuard - Gestor de Menú y Congelador Familiar</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2e7d32">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <div class="logo-container">
+            <span class="logo-icon">🥗</span>
+            <h1>ChefGuard</h1>
+        </div>
+        <p class="subtitle">Organización de comidas y stock familiar</p>
+    </header>
+
+    <main class="container">
+        <!-- Banner de Informe del Domingo -->
+        <section id="sunday-report-banner" class="report-banner hidden">
+            <div class="report-card">
+                <div class="report-header">
+                    <h2>📊 Informe Semanal de Cocina</h2>
+                    <span class="report-tag">Domingo +21:00h</span>
+                </div>
+                <p id="report-summary-text">Resumen de actividad de la semana finalizada:</p>
+                <div id="report-details" class="report-details"></div>
+                <button class="btn btn-secondary btn-sm" onclick="closeReportBanner()">Entendido / Cerrar</button>
+            </div>
+        </section>
+
+        <!-- Navegación por pestañas -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('freezer')">🧊 Congelador (<span id="freezer-count">0</span>)</button>
+            <button class="tab-btn" onclick="switchTab('planner')">📅 Plan Semanal</button>
+            <button class="tab-btn" onclick="switchTab('history')">📜 Resumen</button>
+        </nav>
+
+        <!-- Vista 1: Congelador / Stock Activo -->
+        <section id="tab-freezer" class="tab-content active">
+            <div class="section-action-header">
+                <h2>Alimentos en Congelador</h2>
+                <button class="btn btn-primary" onclick="openAddModal()">➕ Añadir Guiso</button>
+            </div>
+
+            <p class="section-desc">Se muestran únicamente los guisos y raciones actualmente disponibles.</p>
+
+            <div id="stock-grid" class="cards-grid">
+                <!-- Se rellena dinámicamente -->
+            </div>
+
+            <div id="empty-stock-msg" class="empty-state hidden">
+                <div class="empty-icon">🥦</div>
+                <h3>¡El congelador está vacío!</h3>
+                <p>Presiona el botón "Añadir Guiso" cuando prepares tus comidas de la semana.</p>
+            </div>
+        </section>
+
+        <!-- Vista 2: Planificador Semanal -->
+        <section id="tab-planner" class="tab-content">
+            <h2>Planificador Semanal (Lunes a Domingo)</h2>
+            <p class="section-desc">Planifica o descuenta tus comidas y cenas de la semana.</p>
+            
+            <div class="week-selector">
+                <span id="current-week-label">Semana Actual</span>
+            </div>
+
+            <div id="week-planner-container" class="planner-days">
+                <!-- Días de la semana dinámicos -->
+            </div>
+        </section>
+
+        <!-- Vista 3: Informe / Historial -->
+        <section id="tab-history" class="tab-content">
+            <h2>Resumen y Estadísticas</h2>
+            <div class="stats-card">
+                <h3>🍲 Raciones Totales Consumidas esta semana</h3>
+                <div id="stats-total-consumed" class="stat-number">0</div>
+            </div>
+            
+            <div class="report-box">
+                <h3>📋 Estado General del Congelador</h3>
+                <div id="full-inventory-list" class="inventory-summary-list"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal para Añadir/Cocinar Guiso -->
+    <div id="add-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🍲 Registrar Guiso / Congelación</h3>
+                <span class="close-btn" onclick="closeAddModal()">&times;</span>
+            </div>
+            <form id="add-dish-form">
+                <div class="form-group">
+                    <label for="dish-category">Categoría:</label>
+                    <select id="dish-category" onchange="updateDishOptions()" required>
+                        <option value="Comida">Comidas (Alubias, Lentejas, Arroz...)</option>
+                        <option value="Cena">Cenas (Pescado, Pavo, Carne Picada...)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="dish-name">Plato / Alimento:</label>
+                    <select id="dish-name" required>
+                        <!-- Opciones dinámicas -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="dish-custom-name">O un nombre personalizado:</label>
+                    <input type="text" id="dish-custom-name" placeholder="Ej: Lasaña vegetal, Crema de calabacín...">
+                </div>
+
+                <div class="form-group">
+                    <label for="dish-servings">Número de raciones a congelar:</label>
+                    <input type="number" id="dish-servings" min="1" max="50" value="6" required>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar en Congelador</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- PWA Install prompt banner (opcional) -->
+    <div id="pwa-install-banner" class="pwa-banner hidden">
+        <span>📲 ¡Instala ChefGuard en tu móvil para usarlo sin conexión!</span>
+        <button id="pwa-install-btn" class="btn btn-sm btn-light">Instalar</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

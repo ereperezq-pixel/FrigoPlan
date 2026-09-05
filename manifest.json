@@ -1,0 +1,21 @@
+{
+  "name": "ChefGuard - Menú y Congelador",
+  "short_name": "ChefGuard",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#2e7d32",
+  "theme_color": "#2e7d32",
+  "description": "Gestión de comidas semanales y raciones congeladas para toda la familia.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1046/1046784.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1046/1046784.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
