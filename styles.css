@@ -1,4 +1,4 @@
-/* Estilos Principales - ChefGuard */
+/* Estilos Principales - FrigoPlan */
 
 :root {
     --primary-color: #2e7d32;
@@ -35,7 +35,7 @@ body {
     background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
     color: white;
     text-align: center;
-    padding: 24px 16px;
+    padding: 20px 16px;
     border-bottom-left-radius: 24px;
     border-bottom-right-radius: 24px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -61,14 +61,91 @@ body {
 .subtitle {
     font-size: 0.95rem;
     opacity: 0.9;
-    margin-top: 4px;
+    margin-top: 2px;
 }
 
-/* Layout */
+/* Container */
 .container {
     max-width: 800px;
     margin: 0 auto;
     padding: 20px 16px;
+}
+
+/* Daily Summary Card */
+.daily-summary-card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    border-top: 5px solid var(--primary-color);
+}
+
+.daily-summary-card h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.2rem;
+    color: var(--primary-dark);
+    margin-bottom: 12px;
+}
+
+.daily-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.day-summary-box {
+    background: #f9fbe7;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid #dce775;
+}
+
+.badge-day {
+    display: inline-block;
+    font-weight: 800;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--primary-color);
+    color: white;
+    margin-bottom: 6px;
+}
+
+.summary-details p {
+    font-size: 0.88rem;
+    margin-top: 4px;
+}
+
+/* Alerts Container */
+.alerts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.alert-card {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.alert-defrost {
+    background: #e1f5fe;
+    color: #0277bd;
+    border-left: 5px solid #0288d1;
+}
+
+.alert-cook {
+    background: #fff3e0;
+    color: #e65100;
+    border-left: 5px solid #ff9800;
 }
 
 /* Tab Navigation */
@@ -101,15 +178,8 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-/* Tab Content */
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
-    animation: fadeIn 0.3s ease;
-}
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.3s ease; }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
@@ -151,20 +221,10 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    transition: transform 0.2s ease;
 }
 
-.stock-card:hover {
-    transform: translateY(-2px);
-}
-
-.stock-card.comida {
-    border-left: 6px solid #4caf50;
-}
-
-.stock-card.cena {
-    border-left: 6px solid #ff9800;
-}
+.stock-card.comida { border-left: 6px solid #4caf50; }
+.stock-card.cena { border-left: 6px solid #ff9800; }
 
 .card-header {
     display: flex;
@@ -180,11 +240,7 @@ body {
     border-radius: 12px;
 }
 
-.dish-title {
-    font-weight: 700;
-    font-size: 1.15rem;
-    color: #2c3e50;
-}
+.dish-title { font-weight: 700; font-size: 1.15rem; color: #2c3e50; }
 
 .dish-badge {
     display: inline-block;
@@ -225,30 +281,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
 }
 
 .btn-minus { background: #ffebee; color: #c62828; }
 .btn-plus { background: #e8f5e9; color: #2e7d32; }
 
-.btn-minus:active { background: #ffcdd2; }
-.btn-plus:active { background: #c8e6c9; }
-
-/* Empty state */
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    background: var(--card-bg);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-}
-
-.empty-icon {
-    font-size: 3.5rem;
-    margin-bottom: 12px;
-}
-
-/* Planificador */
+/* Planificador Days */
 .planner-days {
     display: flex;
     flex-direction: column;
@@ -278,9 +316,15 @@ body {
 
 .slot-box {
     background: #f9fbe7;
-    padding: 10px;
-    border-radius: 8px;
+    padding: 12px;
+    border-radius: 10px;
     border: 1px dashed #c0ca33;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.slot-box:hover {
+    background: #f0f4c3;
 }
 
 .slot-label {
@@ -291,7 +335,21 @@ body {
     margin-bottom: 4px;
 }
 
-/* Modal */
+.slot-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.slot-status {
+    font-size: 0.75rem;
+    margin-top: 4px;
+    font-weight: bold;
+}
+
+.status-ok { color: #2e7d32; }
+.status-cook { color: #e65100; }
+
+/* Modal & Forms */
 .modal {
     display: none;
     position: fixed;
@@ -304,9 +362,7 @@ body {
     padding: 16px;
 }
 
-.modal.active {
-    display: flex;
-}
+.modal.active { display: flex; }
 
 .modal-content {
     background: white;
@@ -324,23 +380,10 @@ body {
     margin-bottom: 16px;
 }
 
-.close-btn {
-    font-size: 1.8rem;
-    cursor: pointer;
-    color: #999;
-}
+.close-btn { font-size: 1.8rem; cursor: pointer; color: #999; }
 
-.form-group {
-    margin-bottom: 16px;
-}
-
-.form-group label {
-    display: block;
-    font-weight: 700;
-    font-size: 0.9rem;
-    margin-bottom: 6px;
-}
-
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-weight: 700; font-size: 0.9rem; margin-bottom: 6px; }
 .form-group select, .form-group input {
     width: 100%;
     padding: 10px 12px;
@@ -350,14 +393,16 @@ body {
     font-size: 0.95rem;
 }
 
-.form-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 20px;
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+.info-alert {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 8px;
 }
 
-/* Botones */
 .btn {
     border: none;
     padding: 10px 18px;
@@ -365,61 +410,10 @@ body {
     font-weight: 700;
     font-family: inherit;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .btn-primary { background: var(--primary-color); color: white; }
-.btn-primary:hover { background: var(--primary-dark); }
 .btn-secondary { background: #e0e0e0; color: #333; }
 .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
-
-/* Banner Domingo */
-.report-banner {
-    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-    color: white;
-    padding: 16px;
-    border-radius: var(--border-radius);
-    margin-bottom: 20px;
-    box-shadow: 0 6px 16px rgba(255, 152, 0, 0.3);
-}
-
-.report-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.report-tag {
-    background: rgba(255,255,255,0.25);
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: bold;
-}
-
-.report-details {
-    background: rgba(255,255,255,0.15);
-    padding: 10px 14px;
-    border-radius: 10px;
-    margin: 10px 0;
-    font-size: 0.95rem;
-}
-
-/* Stats */
-.stats-card {
-    background: white;
-    padding: 20px;
-    border-radius: var(--border-radius);
-    text-align: center;
-    box-shadow: var(--shadow);
-    margin-bottom: 20px;
-}
-
-.stat-number {
-    font-family: 'Fredoka One', cursive;
-    font-size: 3rem;
-    color: var(--primary-color);
-}
 
 .hidden { display: none !important; }

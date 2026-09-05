@@ -1,9 +1,11 @@
-// Lógica principal - ChefGuard
+// Lógica principal - FrigoPlan
 
 const DEFAULT_FOODS = {
     Comida: ['Alubias', 'Lentejas', 'Arroz', 'Pollo', 'Pasta', 'Pasta de legumbre'],
     Cena: ['Pescado', 'Pavo', 'Carne picada', 'Salchichas']
 };
+
+const CONGELABLE_FOODS = ['alubias', 'lentejas'];
 
 const FOOD_ICONS = {
     'Alubias': '🫘',
@@ -29,7 +31,7 @@ let state = {
 
 // Cargar Datos
 function loadState() {
-    const saved = localStorage.getItem('chefguard_data');
+    const saved = localStorage.getItem('frigoplan_data');
     if (saved) {
         try {
             state = JSON.parse(saved);
@@ -37,43 +39,60 @@ function loadState() {
             console.error("Error al cargar datos", e);
         }
     } else {
-        // Datos por defecto si no hay nada guardado
+        // Ejemplo inicial
         state.stock = [
-            { id: '1', name: 'Alubias', category: 'Comida', servings: 6, created: 'Martes' },
-            { id: '2', name: 'Lentejas', category: 'Comida', servings: 6, created: 'Martes' }
+            { id: '1', name: 'Alubias', category: 'Comida', servings: 6 },
+            { id: '2', name: 'Lentejas', category: 'Comida', servings: 0 }
         ];
+        state.planner = {
+            'Lunes_comida': 'Alubias',
+            'Martes_comida': 'Lentejas'
+        };
     }
     saveState();
 }
 
 function saveState() {
-    localStorage.setItem('chefguard_data', JSON.stringify(state));
+    localStorage.setItem('frigoplan_data', JSON.stringify(state));
     renderAll();
 }
 
-// Inicialización
 document.addEventListener('DOMContentLoaded', () => {
     loadState();
     setupSundayReport();
     updateDishOptions();
 });
 
-// Renderizar UI
 function renderAll() {
     renderStockGrid();
+    renderDailySummary();
     renderPlanner();
+    renderAlerts();
     renderStats();
 }
 
-// 1. Mostrar Solo Alimentos en Congelador (> 0 Raciones)
+// Comprobación de Stock para guisos
+function checkGuisoStock(dishName) {
+    const cleanName = dishName.toLowerCase().trim();
+    if (!CONGELABLE_FOODS.includes(cleanName)) return null;
+
+    const item = state.stock.find(i => i.name.toLowerCase().trim() === cleanName);
+    const servings = item ? item.servings : 0;
+
+    return {
+        isGuiso: true,
+        servings: servings,
+        hasStock: servings > 0
+    };
+}
+
+// 1. Congelador (Solo stock > 0)
 function renderStockGrid() {
     const grid = document.getElementById('stock-grid');
     const emptyMsg = document.getElementById('empty-stock-msg');
     const freezerCount = document.getElementById('freezer-count');
 
     grid.innerHTML = '';
-
-    // Filtrar estrictamente raciones > 0
     const activeStock = state.stock.filter(item => item.servings > 0);
     freezerCount.textContent = activeStock.reduce((acc, curr) => acc + curr.servings, 0);
 
@@ -109,22 +128,167 @@ function renderStockGrid() {
     });
 }
 
-// Cambiar Raciones
 function changeServings(id, delta) {
     const item = state.stock.find(i => i.id === id);
     if (!item) return;
 
     item.servings += delta;
-
     if (delta < 0) {
-        state.weeklyLog.push({
-            dish: item.name,
-            timestamp: new Date().toISOString()
-        });
+        state.weeklyLog.push({ dish: item.name, timestamp: new Date().toISOString() });
     }
-
     saveState();
 }
+
+// 2. Resumen Diario en Página Principal (Hoy y Mañana)
+function renderDailySummary() {
+    const todayIndex = new Date().getDay(); // 0: Dom, 1: Lun, ...
+    const jsToSpanishIndex = todayIndex === 0 ? 6 : todayIndex - 1;
+    const tomorrowIndex = (jsToSpanishIndex + 1) % 7;
+
+    const todayDay = DAYS_OF_WEEK[jsToSpanishIndex];
+    const tomorrowDay = DAYS_OF_WEEK[tomorrowIndex];
+
+    document.getElementById('today-lunch').textContent = state.planner[`${todayDay}_comida`] || 'Sin planificar';
+    document.getElementById('today-dinner').textContent = state.planner[`${todayDay}_cena`] || 'Sin planificar';
+
+    document.getElementById('tomorrow-lunch').textContent = state.planner[`${tomorrowDay}_comida`] || 'Sin planificar';
+    document.getElementById('tomorrow-dinner').textContent = state.planner[`${tomorrowDay}_cena`] || 'Sin planificar';
+}
+
+// 3. Renderizar Avisos (Descongelar y Guisar)
+function renderAlerts() {
+    const alertsSection = document.getElementById('alerts-section');
+    alertsSection.innerHTML = '';
+
+    const todayIndex = new Date().getDay();
+    const jsToSpanishIndex = todayIndex === 0 ? 6 : todayIndex - 1;
+    const tomorrowIndex = (jsToSpanishIndex + 1) % 7;
+    const tomorrowDay = DAYS_OF_WEEK[tomorrowIndex];
+
+    // Aviso A: Descongelar si mañana hay guiso congelado
+    const tomorrowLunch = state.planner[`${tomorrowDay}_comida`] || '';
+    const tomorrowDinner = state.planner[`${tomorrowDay}_cena`] || '';
+
+    [tomorrowLunch, tomorrowDinner].forEach(dish => {
+        if (dish) {
+            const check = checkGuisoStock(dish);
+            if (check && check.isGuiso && check.hasStock) {
+                const alertBox = document.createElement('div');
+                alertBox.className = 'alert-card alert-defrost';
+                alertBox.innerHTML = `❄️ <strong>Aviso Descongelación:</strong> Recuerda saca hoy del congelador <strong>${dish}</strong> para mañana (${tomorrowDay}).`;
+                alertsSection.appendChild(alertBox);
+            }
+        }
+    });
+
+    // Aviso B: Anunciar que hay que guisar si está planificado pero no hay stock
+    DAYS_OF_WEEK.forEach(day => {
+        ['comida', 'cena'].forEach(type => {
+            const dish = state.planner[`${day}_${type}`];
+            if (dish) {
+                const check = checkGuisoStock(dish);
+                if (check && check.isGuiso && !check.hasStock) {
+                    const alertBox = document.createElement('div');
+                    alertBox.className = 'alert-card alert-cook';
+                    alertBox.innerHTML = `👨‍🍳 <strong>Atención Cocina:</strong> Planificado <strong>${dish}</strong> el ${day}, pero NO hay stock. ¡Tienes que guisar!`;
+                    alertsSection.appendChild(alertBox);
+                }
+            }
+        });
+    });
+}
+
+// 4. Renderizar Planificador Semanal
+function renderPlanner() {
+    const container = document.getElementById('week-planner-container');
+    container.innerHTML = '';
+
+    DAYS_OF_WEEK.forEach(day => {
+        const lunchDish = state.planner[`${day}_comida`] || 'Sin fijar';
+        const dinnerDish = state.planner[`${day}_cena`] || 'Sin fijar';
+
+        const lunchCheck = checkGuisoStock(lunchDish);
+        const dinnerCheck = checkGuisoStock(dinnerDish);
+
+        const dayCard = document.createElement('div');
+        dayCard.className = 'day-card';
+        dayCard.innerHTML = `
+            <div class="day-title">${day}</div>
+            <div class="day-slots">
+                <div class="slot-box" onclick="openPlanModal('${day}', 'comida')">
+                    <div class="slot-label">☀️ Comida</div>
+                    <div class="slot-value">${lunchDish}</div>
+                    ${getSlotStatusHTML(lunchCheck)}
+                </div>
+                <div class="slot-box" onclick="openPlanModal('${day}', 'cena')">
+                    <div class="slot-label">🌙 Cena</div>
+                    <div class="slot-value">${dinnerDish}</div>
+                    ${getSlotStatusHTML(dinnerCheck)}
+                </div>
+            </div>
+        `;
+        container.appendChild(dayCard);
+    });
+}
+
+function getSlotStatusHTML(check) {
+    if (!check || !check.isGuiso) return '';
+    if (check.hasStock) {
+        return `<div class="slot-status status-ok">✓ Hay stock (${check.servings} rac)</div>`;
+    } else {
+        return `<div class="slot-status status-cook">⚠️ Tienes que guisar (0 rac)</div>`;
+    }
+}
+
+// Modal de Planificación
+function openPlanModal(day, type) {
+    document.getElementById('plan-day').value = day;
+    document.getElementById('plan-type').value = type;
+    document.getElementById('plan-modal-title').textContent = `Fijar ${type} del ${day}`;
+
+    const currentDish = state.planner[`${day}_${type}`] || '';
+    const input = document.getElementById('plan-dish-input');
+    input.value = currentDish;
+
+    updateStockAlertInModal(currentDish);
+
+    input.oninput = (e) => updateStockAlertInModal(e.target.value);
+
+    document.getElementById('plan-modal').classList.add('active');
+}
+
+function updateStockAlertInModal(dishName) {
+    const infoBox = document.getElementById('stock-availability-info');
+    const check = checkGuisoStock(dishName);
+
+    if (check && check.isGuiso) {
+        infoBox.classList.remove('hidden');
+        if (check.hasStock) {
+            infoBox.className = 'info-alert alert-defrost';
+            infoBox.innerHTML = `✅ Guiso detectado: Tienes ${check.servings} raciones en stock.`;
+        } else {
+            infoBox.className = 'info-alert alert-cook';
+            infoBox.innerHTML = `⚠️ Guiso detectado: NO hay raciones en el congelador. Tendrás que guisar.`;
+        }
+    } else {
+        infoBox.classList.add('hidden');
+    }
+}
+
+function closePlanModal() {
+    document.getElementById('plan-modal').classList.remove('active');
+}
+
+document.getElementById('plan-dish-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const day = document.getElementById('plan-day').value;
+    const type = document.getElementById('plan-type').value;
+    const dish = document.getElementById('plan-dish-input').value.trim();
+
+    state.planner[`${day}_${type}`] = dish;
+    closePlanModal();
+    saveState();
+});
 
 // Modal Añadir Guiso
 function openAddModal() {
@@ -156,8 +320,6 @@ document.getElementById('add-dish-form').addEventListener('submit', (e) => {
     const servings = parseInt(document.getElementById('dish-servings').value, 10);
 
     const name = customName.length > 0 ? customName : selectName;
-
-    // Verificar si ya existe en stock
     const existing = state.stock.find(i => i.name.toLowerCase() === name.toLowerCase() && i.category === category);
 
     if (existing) {
@@ -176,7 +338,6 @@ document.getElementById('add-dish-form').addEventListener('submit', (e) => {
     saveState();
 });
 
-// Navegación Pestañas
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -185,36 +346,8 @@ function switchTab(tabId) {
     document.getElementById(`tab-${tabId}`).classList.add('active');
 }
 
-// Renderizar Planificador
-function renderPlanner() {
-    const container = document.getElementById('week-planner-container');
-    container.innerHTML = '';
-
-    DAYS_OF_WEEK.forEach(day => {
-        const dayCard = document.createElement('div');
-        dayCard.className = 'day-card';
-        dayCard.innerHTML = `
-            <div class="day-title">${day}</div>
-            <div class="day-slots">
-                <div class="slot-box">
-                    <div class="slot-label">☀️ Comida</div>
-                    <div>${state.planner[day + '_comida'] || 'Sin planificar'}</div>
-                </div>
-                <div class="slot-box">
-                    <div class="slot-label">🌙 Cena</div>
-                    <div>${state.planner[day + '_cena'] || 'Sin planificar'}</div>
-                </div>
-            </div>
-        `;
-        container.appendChild(dayCard);
-    });
-}
-
-// Renderizar Estadísticas
 function renderStats() {
-    const totalConsumed = state.weeklyLog.length;
-    document.getElementById('stats-total-consumed').textContent = totalConsumed;
-
+    document.getElementById('stats-total-consumed').textContent = state.weeklyLog.length;
     const list = document.getElementById('full-inventory-list');
     list.innerHTML = '';
 
@@ -232,24 +365,16 @@ function renderStats() {
     });
 }
 
-// Verificación Informe Domingo 21:00h
 function setupSundayReport() {
     const now = new Date();
-    const day = now.getDay(); // 0 = Domingo
-    const hour = now.getHours();
-
-    // Si es Domingo y >= 21:00h
-    if (day === 0 && hour >= 21) {
+    if (now.getDay() === 0 && now.getHours() >= 21) {
         const banner = document.getElementById('sunday-report-banner');
         const details = document.getElementById('report-details');
 
         const activeStock = state.stock.filter(i => i.servings > 0);
         let summaryHTML = `<p><strong>Consumos de esta semana:</strong> ${state.weeklyLog.length} raciones extraídas.</p>`;
-        summaryHTML += `<p style="margin-top: 6px;"><strong>Stock disponible para la próxima semana:</strong></p><ul>`;
-
-        activeStock.forEach(i => {
-            summaryHTML += `<li>${i.name}: ${i.servings} raciones</li>`;
-        });
+        summaryHTML += `<p style="margin-top: 6px;"><strong>Stock disponible:</strong></p><ul>`;
+        activeStock.forEach(i => summaryHTML += `<li>${i.name}: ${i.servings} raciones</li>`);
         summaryHTML += `</ul>`;
 
         details.innerHTML = summaryHTML;
@@ -261,9 +386,6 @@ function closeReportBanner() {
     document.getElementById('sunday-report-banner').classList.add('hidden');
 }
 
-// Registro Service Worker
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('Service Worker Registrado'))
-        .catch(err => console.log('Error SW:', err));
+    navigator.serviceWorker.register('sw.js').catch(() => {});
 }
