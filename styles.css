@@ -54,15 +54,8 @@ body {
     letter-spacing: 1px;
 }
 
-.logo-icon {
-    font-size: 2.4rem;
-}
-
-.subtitle {
-    font-size: 0.95rem;
-    opacity: 0.9;
-    margin-top: 2px;
-}
+.logo-icon { font-size: 2.4rem; }
+.subtitle { font-size: 0.95rem; opacity: 0.9; margin-top: 2px; }
 
 /* Container */
 .container {
@@ -85,13 +78,13 @@ body {
     font-family: 'Fredoka One', cursive;
     font-size: 1.2rem;
     color: var(--primary-dark);
-    margin-bottom: 12px;
 }
 
 .daily-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+    margin-top: 10px;
 }
 
 .day-summary-box {
@@ -114,7 +107,18 @@ body {
 
 .summary-details p {
     font-size: 0.88rem;
-    margin-top: 4px;
+    margin-top: 6px;
+}
+
+.clickable-dish {
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.clickable-dish:hover {
+    background: #f0f4c3;
 }
 
 /* Alerts Container */
@@ -162,10 +166,10 @@ body {
     flex: 1;
     border: none;
     background: transparent;
-    padding: 12px 8px;
+    padding: 12px 4px;
     font-family: 'Quicksand', sans-serif;
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     color: #455a64;
     border-radius: 10px;
     cursor: pointer;
@@ -196,7 +200,7 @@ body {
 .section-action-header h2 {
     font-family: 'Fredoka One', cursive;
     color: var(--primary-dark);
-    font-size: 1.5rem;
+    font-size: 1.4rem;
 }
 
 .section-desc {
@@ -208,14 +212,14 @@ body {
 /* Cards Grid */
 .cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
 }
 
-.stock-card {
+.stock-card, .recipe-card {
     background: var(--card-bg);
     border-radius: var(--border-radius);
-    padding: 18px;
+    padding: 16px;
     box-shadow: var(--shadow);
     border: 2px solid #e0e0e0;
     display: flex;
@@ -234,13 +238,13 @@ body {
 }
 
 .dish-icon {
-    font-size: 2.2rem;
+    font-size: 2rem;
     background: #f1f8e9;
     padding: 8px;
     border-radius: 12px;
 }
 
-.dish-title { font-weight: 700; font-size: 1.15rem; color: #2c3e50; }
+.dish-title { font-weight: 700; font-size: 1.05rem; color: #2c3e50; }
 
 .dish-badge {
     display: inline-block;
@@ -266,16 +270,16 @@ body {
 
 .servings-count {
     font-family: 'Fredoka One', cursive;
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     color: var(--primary-dark);
 }
 
 .btn-counter {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: none;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: bold;
     cursor: pointer;
     display: flex;

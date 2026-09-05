@@ -1,11 +1,17 @@
 // Lógica principal - FrigoPlan
 
-const DEFAULT_FOODS = {
-    Comida: ['Alubias', 'Lentejas', 'Arroz', 'Pollo', 'Pasta', 'Pasta de legumbre'],
-    Cena: ['Pescado', 'Pavo', 'Carne picada', 'Salchichas']
-};
-
-const CONGELABLE_FOODS = ['alubias', 'lentejas'];
+const INITIAL_RECIPES = [
+    { name: 'Alubias', category: 'Comida', freezable: true },
+    { name: 'Lentejas', category: 'Comida', freezable: true },
+    { name: 'Arroz', category: 'Comida', freezable: false },
+    { name: 'Pollo', category: 'Comida', freezable: false },
+    { name: 'Pasta', category: 'Comida', freezable: false },
+    { name: 'Pasta de legumbre', category: 'Comida', freezable: false },
+    { name: 'Pescado', category: 'Cena', freezable: false },
+    { name: 'Pavo', category: 'Cena', freezable: false },
+    { name: 'Carne picada', category: 'Cena', freezable: false },
+    { name: 'Salchichas', category: 'Cena', freezable: false }
+];
 
 const FOOD_ICONS = {
     'Alubias': '🫘',
@@ -25,8 +31,10 @@ const DAYS_OF_WEEK = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sá
 // Estado Global
 let state = {
     stock: [],
+    recipes: [],
     weeklyLog: [],
-    planner: {}
+    planner: {},
+    lastAutoDeductDate: ''
 };
 
 // Cargar Datos
@@ -38,17 +46,22 @@ function loadState() {
         } catch (e) {
             console.error("Error al cargar datos", e);
         }
-    } else {
-        // Ejemplo inicial
+    }
+    
+    if (!state.recipes || state.recipes.length === 0) {
+        state.recipes = [...INITIAL_RECIPES];
+    }
+    if (!state.stock) {
         state.stock = [
             { id: '1', name: 'Alubias', category: 'Comida', servings: 6 },
             { id: '2', name: 'Lentejas', category: 'Comida', servings: 0 }
         ];
-        state.planner = {
-            'Lunes_comida': 'Alubias',
-            'Martes_comida': 'Lentejas'
-        };
     }
+    if (!state.planner) {
+        state.planner = { 'Lunes_comida': 'Alubias', 'Martes_comida': 'Lentejas' };
+    }
+
+    checkAutoDeduct9PM();
     saveState();
 }
 
@@ -67,16 +80,20 @@ function renderAll() {
     renderStockGrid();
     renderDailySummary();
     renderPlanner();
+    renderRecipes();
     renderAlerts();
     renderStats();
 }
 
-// Comprobación de Stock para guisos
+// Comprobación de Stock para guisos congelables
 function checkGuisoStock(dishName) {
-    const cleanName = dishName.toLowerCase().trim();
-    if (!CONGELABLE_FOODS.includes(cleanName)) return null;
+    if (!dishName) return null;
+    const recipe = state.recipes.find(r => r.name.toLowerCase().trim() === dishName.toLowerCase().trim());
+    
+    // Solo si es una receta marcada como congelable
+    if (!recipe || !recipe.freezable) return null;
 
-    const item = state.stock.find(i => i.name.toLowerCase().trim() === cleanName);
+    const item = state.stock.find(i => i.name.toLowerCase().trim() === dishName.toLowerCase().trim());
     const servings = item ? item.servings : 0;
 
     return {
@@ -140,34 +157,69 @@ function changeServings(id, delta) {
 }
 
 // 2. Resumen Diario en Página Principal (Hoy y Mañana)
-function renderDailySummary() {
+function getTodayAndTomorrowNames() {
     const todayIndex = new Date().getDay(); // 0: Dom, 1: Lun, ...
     const jsToSpanishIndex = todayIndex === 0 ? 6 : todayIndex - 1;
     const tomorrowIndex = (jsToSpanishIndex + 1) % 7;
 
-    const todayDay = DAYS_OF_WEEK[jsToSpanishIndex];
-    const tomorrowDay = DAYS_OF_WEEK[tomorrowIndex];
-
-    document.getElementById('today-lunch').textContent = state.planner[`${todayDay}_comida`] || 'Sin planificar';
-    document.getElementById('today-dinner').textContent = state.planner[`${todayDay}_cena`] || 'Sin planificar';
-
-    document.getElementById('tomorrow-lunch').textContent = state.planner[`${tomorrowDay}_comida`] || 'Sin planificar';
-    document.getElementById('tomorrow-dinner').textContent = state.planner[`${tomorrowDay}_cena`] || 'Sin planificar';
+    return {
+        today: DAYS_OF_WEEK[jsToSpanishIndex],
+        tomorrow: DAYS_OF_WEEK[tomorrowIndex]
+    };
 }
 
-// 3. Renderizar Avisos (Descongelar y Guisar)
+function renderDailySummary() {
+    const days = getTodayAndTomorrowNames();
+
+    document.getElementById('today-lunch').textContent = state.planner[`${days.today}_comida`] || 'Sin planificar';
+    document.getElementById('today-dinner').textContent = state.planner[`${days.today}_cena`] || 'Sin planificar';
+
+    document.getElementById('tomorrow-lunch').textContent = state.planner[`${days.tomorrow}_comida`] || 'Sin planificar';
+    document.getElementById('tomorrow-dinner').textContent = state.planner[`${days.tomorrow}_cena`] || 'Sin planificar';
+}
+
+function openMainChangeModal(type) {
+    const days = getTodayAndTomorrowNames();
+    openPlanModal(days.today, type);
+}
+
+// 3. Extracción Automática de Stock a las 21:00h
+function checkAutoDeduct9PM() {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    // Si ya se procesó hoy o no son las 21:00h pasadas, salir
+    if (state.lastAutoDeductDate === todayStr || now.getHours() < 21) {
+        return;
+    }
+
+    const days = getTodayAndTomorrowNames();
+    const todayName = days.today;
+
+    ['comida', 'cena'].forEach(type => {
+        const dishName = state.planner[`${todayName}_${type}`];
+        if (dishName) {
+            const stockItem = state.stock.find(i => i.name.toLowerCase().trim() === dishName.toLowerCase().trim());
+            if (stockItem && stockItem.servings > 0) {
+                stockItem.servings -= 1;
+                state.weeklyLog.push({ dish: stockItem.name, timestamp: now.toISOString(), auto: true });
+            }
+        }
+    });
+
+    state.lastAutoDeductDate = todayStr;
+}
+
+// 4. Renderizar Avisos
 function renderAlerts() {
     const alertsSection = document.getElementById('alerts-section');
     alertsSection.innerHTML = '';
 
-    const todayIndex = new Date().getDay();
-    const jsToSpanishIndex = todayIndex === 0 ? 6 : todayIndex - 1;
-    const tomorrowIndex = (jsToSpanishIndex + 1) % 7;
-    const tomorrowDay = DAYS_OF_WEEK[tomorrowIndex];
+    const days = getTodayAndTomorrowNames();
 
-    // Aviso A: Descongelar si mañana hay guiso congelado
-    const tomorrowLunch = state.planner[`${tomorrowDay}_comida`] || '';
-    const tomorrowDinner = state.planner[`${tomorrowDay}_cena`] || '';
+    // Aviso A: Descongelar mañana si toca guiso congelado
+    const tomorrowLunch = state.planner[`${days.tomorrow}_comida`] || '';
+    const tomorrowDinner = state.planner[`${days.tomorrow}_cena`] || '';
 
     [tomorrowLunch, tomorrowDinner].forEach(dish => {
         if (dish) {
@@ -175,13 +227,13 @@ function renderAlerts() {
             if (check && check.isGuiso && check.hasStock) {
                 const alertBox = document.createElement('div');
                 alertBox.className = 'alert-card alert-defrost';
-                alertBox.innerHTML = `❄️ <strong>Aviso Descongelación:</strong> Recuerda saca hoy del congelador <strong>${dish}</strong> para mañana (${tomorrowDay}).`;
+                alertBox.innerHTML = `❄️ <strong>Aviso Descongelación:</strong> Sacar del congelador <strong>${dish}</strong> para mañana (${days.tomorrow}).`;
                 alertsSection.appendChild(alertBox);
             }
         }
     });
 
-    // Aviso B: Anunciar que hay que guisar si está planificado pero no hay stock
+    // Aviso B: Anunciar si hay que guisar por falta de stock
     DAYS_OF_WEEK.forEach(day => {
         ['comida', 'cena'].forEach(type => {
             const dish = state.planner[`${day}_${type}`];
@@ -190,7 +242,7 @@ function renderAlerts() {
                 if (check && check.isGuiso && !check.hasStock) {
                     const alertBox = document.createElement('div');
                     alertBox.className = 'alert-card alert-cook';
-                    alertBox.innerHTML = `👨‍🍳 <strong>Atención Cocina:</strong> Planificado <strong>${dish}</strong> el ${day}, pero NO hay stock. ¡Tienes que guisar!`;
+                    alertBox.innerHTML = `👨‍🍳 <strong>Atención Cocina:</strong> Planificado <strong>${dish}</strong> el ${day}, pero NO hay stock. ¡Hay que guisar!`;
                     alertsSection.appendChild(alertBox);
                 }
             }
@@ -198,7 +250,7 @@ function renderAlerts() {
     });
 }
 
-// 4. Renderizar Planificador Semanal
+// 5. Planificador Semanal con Desplegable
 function renderPlanner() {
     const container = document.getElementById('week-planner-container');
     container.innerHTML = '';
@@ -240,35 +292,45 @@ function getSlotStatusHTML(check) {
     }
 }
 
-// Modal de Planificación
 function openPlanModal(day, type) {
     document.getElementById('plan-day').value = day;
     document.getElementById('plan-type').value = type;
-    document.getElementById('plan-modal-title').textContent = `Fijar ${type} del ${day}`;
+    document.getElementById('plan-modal-title').textContent = `Seleccionar ${type} del ${day}`;
+
+    const select = document.getElementById('plan-dish-select');
+    select.innerHTML = '<option value="">-- Seleccionar alimento --</option>';
+
+    // Rellenar con las recetas registradas
+    const catTarget = type === 'comida' ? 'Comida' : 'Cena';
+    const filteredRecipes = state.recipes.filter(r => r.category === catTarget || true);
+
+    filteredRecipes.forEach(recipe => {
+        const opt = document.createElement('option');
+        opt.value = recipe.name;
+        opt.textContent = `${FOOD_ICONS[recipe.name] || '🥘'} ${recipe.name} ${recipe.freezable ? '(Congelable)' : ''}`;
+        select.appendChild(opt);
+    });
 
     const currentDish = state.planner[`${day}_${type}`] || '';
-    const input = document.getElementById('plan-dish-input');
-    input.value = currentDish;
+    select.value = currentDish;
 
-    updateStockAlertInModal(currentDish);
-
-    input.oninput = (e) => updateStockAlertInModal(e.target.value);
-
+    onPlanSelectChange();
     document.getElementById('plan-modal').classList.add('active');
 }
 
-function updateStockAlertInModal(dishName) {
+function onPlanSelectChange() {
+    const selected = document.getElementById('plan-dish-select').value;
     const infoBox = document.getElementById('stock-availability-info');
-    const check = checkGuisoStock(dishName);
+    const check = checkGuisoStock(selected);
 
     if (check && check.isGuiso) {
         infoBox.classList.remove('hidden');
         if (check.hasStock) {
             infoBox.className = 'info-alert alert-defrost';
-            infoBox.innerHTML = `✅ Guiso detectado: Tienes ${check.servings} raciones en stock.`;
+            infoBox.innerHTML = `✅ Guiso congelable: Tienes ${check.servings} raciones en stock.`;
         } else {
             infoBox.className = 'info-alert alert-cook';
-            infoBox.innerHTML = `⚠️ Guiso detectado: NO hay raciones en el congelador. Tendrás que guisar.`;
+            infoBox.innerHTML = `⚠️ Guiso congelable: NO hay raciones en el congelador. Tendrás que guisar.`;
         }
     } else {
         infoBox.classList.add('hidden');
@@ -283,15 +345,68 @@ document.getElementById('plan-dish-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const day = document.getElementById('plan-day').value;
     const type = document.getElementById('plan-type').value;
-    const dish = document.getElementById('plan-dish-input').value.trim();
+    const dish = document.getElementById('plan-dish-select').value;
 
     state.planner[`${day}_${type}`] = dish;
     closePlanModal();
     saveState();
 });
 
-// Modal Añadir Guiso
+// 6. Catálogo de Recetas y Modal
+function renderRecipes() {
+    const list = document.getElementById('recipes-list');
+    list.innerHTML = '';
+
+    state.recipes.forEach(recipe => {
+        const card = document.createElement('div');
+        card.className = 'recipe-card';
+        card.innerHTML = `
+            <div class="card-header">
+                <span class="dish-icon">${FOOD_ICONS[recipe.name] || '🍲'}</span>
+                <div>
+                    <div class="dish-title">${recipe.name}</div>
+                    <span class="dish-badge badge-${recipe.category.toLowerCase()}">${recipe.category}</span>
+                </div>
+            </div>
+            <div style="font-size: 0.85rem; color: #555; margin-top: 6px;">
+                ${recipe.freezable ? '❄️ Admite congelación' : '🍳 Plato fresco / cocina rápida'}
+            </div>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function openAddRecipeModal() {
+    document.getElementById('add-recipe-modal').classList.add('active');
+}
+
+function closeAddRecipeModal() {
+    document.getElementById('add-recipe-modal').classList.remove('active');
+}
+
+document.getElementById('add-recipe-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('recipe-name').value.trim();
+    const category = document.getElementById('recipe-category').value;
+    const freezable = document.getElementById('recipe-freezable').checked;
+
+    if (name) {
+        const existing = state.recipes.find(r => r.name.toLowerCase() === name.toLowerCase());
+        if (!existing) {
+            state.recipes.push({ name, category, freezable });
+        }
+    }
+
+    document.getElementById('recipe-name').value = '';
+    document.getElementById('recipe-freezable').checked = false;
+    closeAddRecipeModal();
+    updateDishOptions();
+    saveState();
+});
+
+// Modal Añadir Guiso al Congelador
 function openAddModal() {
+    updateDishOptions();
     document.getElementById('add-modal').classList.add('active');
 }
 
@@ -304,22 +419,29 @@ function updateDishOptions() {
     const select = document.getElementById('dish-name');
     select.innerHTML = '';
 
-    DEFAULT_FOODS[cat].forEach(food => {
+    // Filtrar recetas que sean congelables
+    const freezableRecipes = state.recipes.filter(r => r.category === cat && r.freezable);
+
+    freezableRecipes.forEach(recipe => {
         const opt = document.createElement('option');
-        opt.value = food;
-        opt.textContent = `${FOOD_ICONS[food] || ''} ${food}`;
+        opt.value = recipe.name;
+        opt.textContent = `${FOOD_ICONS[recipe.name] || '🥘'} ${recipe.name}`;
         select.appendChild(opt);
     });
+
+    if (freezableRecipes.length === 0) {
+        select.innerHTML = '<option value="">No hay recetas congelables en esta categoría</option>';
+    }
 }
 
 document.getElementById('add-dish-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const category = document.getElementById('dish-category').value;
-    const selectName = document.getElementById('dish-name').value;
-    const customName = document.getElementById('dish-custom-name').value.trim();
+    const name = document.getElementById('dish-name').value;
     const servings = parseInt(document.getElementById('dish-servings').value, 10);
 
-    const name = customName.length > 0 ? customName : selectName;
+    if (!name) return;
+
     const existing = state.stock.find(i => i.name.toLowerCase() === name.toLowerCase() && i.category === category);
 
     if (existing) {
@@ -333,7 +455,6 @@ document.getElementById('add-dish-form').addEventListener('submit', (e) => {
         });
     }
 
-    document.getElementById('dish-custom-name').value = '';
     closeAddModal();
     saveState();
 });
