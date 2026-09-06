@@ -1,4 +1,4 @@
-const CACHE_NAME = 'frigoplan-v4';
+const CACHE_NAME = 'frigoplan-v5';
 const APP_SHELL = ['./', './index.html', './styles.css', './app.js', './config.js', './manifest.json'];
 
 self.addEventListener('install', event => {
