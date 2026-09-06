@@ -1,4 +1,54 @@
 
+
+const APP_VERSION = 'v4';
+const UPDATE_SEEN_KEY = 'frigoplan_update_seen';
+
+function showUpdateNoticeOnce(){
+  if(localStorage.getItem(UPDATE_SEEN_KEY) === APP_VERSION) return;
+  let modal=document.getElementById('update-modal');
+  if(!modal) return;
+  modal.classList.add('active');
+}
+
+function closeUpdateNotice(){
+  localStorage.setItem(UPDATE_SEEN_KEY, APP_VERSION);
+  const modal=document.getElementById('update-modal');
+  if(modal) modal.classList.remove('active');
+}
+
+async function activateAppUpdate(){
+  localStorage.setItem(UPDATE_SEEN_KEY, APP_VERSION);
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(reg && reg.waiting){
+      reg.waiting.postMessage({type:'SKIP_WAITING'});
+      return;
+    }
+  }catch(e){ console.warn('No se pudo activar la actualización',e); }
+  location.reload();
+}
+
+function setupUpdateDetection(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').then(reg=>{
+    reg.update().catch(()=>{});
+    if(reg.waiting) showUpdateNoticeOnce();
+    reg.addEventListener('updatefound',()=>{
+      const worker=reg.installing;
+      if(!worker) return;
+      worker.addEventListener('statechange',()=>{
+        if(worker.state==='installed' && navigator.serviceWorker.controller) showUpdateNoticeOnce();
+      });
+    });
+  }).catch(err=>console.warn('Service Worker no disponible',err));
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!window.__frigoplanReloaded){
+      window.__frigoplanReloaded=true;
+      location.reload();
+    }
+  });
+}
+
 const defaultState = {
     recipes: [
         { id: '1', name: 'Alubias', category: 'Comida', freezable: true },
@@ -117,6 +167,8 @@ async function init() {
     }
     renderAll();
     await initCollaboration();
+    setTimeout(showUpdateNoticeOnce, 250);
+    setupUpdateDetection();
 }
 
 function saveData() {

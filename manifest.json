@@ -1,16 +1,9 @@
 {
-  "name": "FrigoPlan - Menú y Congelador",
+  "name": "FrigoPlan",
   "short_name": "FrigoPlan",
-  "start_url": "./index.html",
+  "start_url": "./",
   "display": "standalone",
-  "background_color": "#2e7d32",
+  "background_color": "#ffffff",
   "theme_color": "#2e7d32",
-  "description": "Organización de menú semanal y stock del congelador familiar.",
-  "icons": [
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/1046/1046784.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    }
-  ]
+  "lang": "es"
 }

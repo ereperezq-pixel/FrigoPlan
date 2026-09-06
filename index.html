@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>FrigoPlan - Gestor Familiar Inteligente</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2e7d32">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
@@ -149,5 +150,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<div id="update-modal" class="modal"><div class="modal-content update-modal-content"><div class="modal-header"><h3>🔄 Nueva actualización</h3><span class="close-btn" onclick="closeUpdateNotice()">&times;</span></div><p>Hay una nueva versión de FrigoPlan disponible.</p><div class="update-actions"><button type="button" class="btn btn-primary" onclick="activateAppUpdate()">Actualizar ahora</button><button type="button" class="btn" onclick="closeUpdateNotice()">Ahora no</button></div></div></div>
 <div id="collab-modal" class="modal"><div class="modal-content collab-modal-content"><div class="modal-header"><h3>👥 FrigoPlan colaborativo</h3><span class="close-btn" onclick="closeModals()">&times;</span></div><p class="collab-help">Usa el mismo código de familia en todos los dispositivos. Los cambios de stock, compra, recetas y planificación se sincronizarán.</p><div class="form-group"><label>Código de familia / sala</label><input type="text" id="collab-room" placeholder="Ej.: familia-cartes-2026"></div><div id="collab-state" class="collab-state"></div><div class="collab-actions"><button type="button" class="btn btn-primary" onclick="connectCollaboration()">🔗 Conectar y sincronizar</button><button type="button" class="btn" onclick="disconnectCollaboration()">📱 Solo este dispositivo</button></div><p class="collab-note">El código es la llave de acceso a esa sala. Usa uno largo y difícil de adivinar.</p></div></div></body>
 </html>
