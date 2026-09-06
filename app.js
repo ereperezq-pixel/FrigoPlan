@@ -1,6 +1,6 @@
 
 
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v5';
 const UPDATE_SEEN_KEY = 'frigoplan_update_seen';
 
 function showUpdateNoticeOnce(){
@@ -99,58 +99,27 @@ async function initCollaboration(){
 }
 
 async function connectCollaboration(roomArg){
-  const input=document.getElementById('collab-room'), room=(roomArg||input?.value||'').trim();
-  if(!collabConfigured()){alert('Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en config.js.');return false;}
-  if(!room){if(input) input.focus();return false;}
+  const input=document.getElementById('collab-room'), room=(roomArg||input.value||'').trim();
+  if(!collabConfigured()){alert('Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en config.js.');return;}
+  if(!room){if(input) input.focus();return;}
   saveCollabPreferences();
   try{
     if(!collab.client){const c=getLocalConfig();collab.client=window.supabase.createClient(c.url,c.key);}
-    setSyncStatus('syncing','● Conectando...');
-    if(collab.channel){await collab.client.removeChannel(collab.channel);collab.channel=null;}
+    setSyncStatus('syncing','● Sincronizando...');
+    if(collab.channel) await collab.client.removeChannel(collab.channel);
     collab.roomId=room;localStorage.setItem('frigoplan_room',room);
-
-    // Creamos la suscripción ANTES de leer/escribir datos para no perder cambios.
-    collab.channel=collab.client.channel('frigoplan-'+room);
-    collab.channel
-      .on('broadcast',{event:'change'},payload=>{
-        const msg=payload?.payload||{};
-        if(msg.sourceId===DEVICE_ID) return;
-        if(msg.data) applyRemoteState(msg.data,false);
-        else if(msg.event) showRemoteNotification(`${msg.deviceName||'Otro dispositivo'}: ${msg.event}`);
-      })
-      .on('postgres_changes',{event:'*',schema:'public',table:'frigoplan_rooms',filter:`room_id=eq.${room}`},p=>{
-        if(p.new&&p.new.data&&!collab.applyingRemote){
-          const meta=p.new.data._meta||{};
-          if(meta.sourceId!==DEVICE_ID) applyRemoteState(p.new.data,false);
-        }
-      });
-
-    await new Promise((resolve,reject)=>{
-      let settled=false;
-      collab.channel.subscribe(status=>{
-        if(status==='SUBSCRIBED'){settled=true;collab.enabled=true;setSyncStatus('online','● Sincronizado');resolve();}
-        else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){if(!settled)reject(new Error('No se pudo abrir el canal de Realtime ('+status+').'));}
-      });
-      setTimeout(()=>{if(!settled)reject(new Error('Tiempo de espera agotado al conectar con Realtime.'));},12000);
-    });
-
     const {data,error}=await collab.client.from('frigoplan_rooms').select('data').eq('room_id',room).maybeSingle();
     if(error) throw error;
-    if(data&&data.data) applyRemoteState(data.data,true);
-    else await pushSharedState('Sala creada y datos iniciales compartidos');
-
+    if(data&&data.data) applyRemoteState(data.data, true); else await pushSharedState('Sala creada y datos iniciales compartidos');
+    collab.channel=collab.client.channel('frigoplan-'+room).on('postgres_changes',{event:'*',schema:'public',table:'frigoplan_rooms',filter:`room_id=eq.${room}`},p=>{
+      if(p.new&&p.new.data&&!collab.applyingRemote) applyRemoteState(p.new.data);
+    }).subscribe(status=>{
+      if(status==='SUBSCRIBED'){collab.enabled=true;setSyncStatus('online','● Sincronizado');}
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){collab.enabled=false;setSyncStatus('error','● Sin conexión');}
+    });
     document.getElementById('collab-state').textContent='Sala conectada. Los cambios se compartirán automáticamente.';
     closeModals();
-    return true;
-  }catch(e){
-    console.error('FrigoPlan connect error:',e);
-    collab.enabled=false;
-    if(collab.channel&&collab.client){try{await collab.client.removeChannel(collab.channel);}catch(_){} }
-    collab.channel=null;
-    setSyncStatus('error','● Sin conexión');
-    document.getElementById('collab-state').textContent='No se pudo conectar: '+(e.message||e);
-    return false;
-  }
+  }catch(e){console.error(e);collab.enabled=false;setSyncStatus('error','● Error de sincronización');document.getElementById('collab-state').textContent='No se pudo conectar: '+(e.message||e);}
 }
 
 function cloneData(obj){
@@ -223,17 +192,10 @@ function saveCollabPreferences(){
 
 async function pushSharedState(eventText='Datos actualizados'){
   if(!collab.client||!collab.roomId||collab.applyingRemote)return;
-  const payload={...state,_meta:{sourceId:DEVICE_ID,deviceName:getDeviceName(),event:eventText,ts:Date.now()}};
   setSyncStatus('syncing','● Guardando...');
-  const {error}=await collab.client.from('frigoplan_rooms').upsert(
-    {room_id:collab.roomId,data:payload,updated_at:new Date().toISOString()},
-    {onConflict:'room_id'}
-  );
+  const payload={...state,_meta:{sourceId:DEVICE_ID,deviceName:getDeviceName(),event:eventText,ts:Date.now()}};
+  const {error}=await collab.client.from('frigoplan_rooms').upsert({room_id:collab.roomId,data:payload,updated_at:new Date().toISOString()},{onConflict:'room_id'});
   if(error){setSyncStatus('error','● Error al guardar');throw error;}
-  // Broadcast independiente de Postgres Changes: sirve para avisos inmediatos.
-  if(collab.channel){
-    try{await collab.channel.send({type:'broadcast',event:'change',payload:{sourceId:DEVICE_ID,deviceName:getDeviceName(),event:eventText,data:payload,ts:Date.now()}});}catch(e){console.warn('Broadcast no disponible:',e);}
-  }
   setSyncStatus('online','● Sincronizado');
 }
 
