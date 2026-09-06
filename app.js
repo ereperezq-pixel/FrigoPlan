@@ -1,6 +1,6 @@
 
 
-const APP_VERSION = 'v5';
+const APP_VERSION = 'v6';
 const UPDATE_SEEN_KEY = 'frigoplan_update_seen';
 
 function showUpdateNoticeOnce(){
@@ -82,6 +82,9 @@ const DEVICE_NAME_KEY = 'frigoplan_device_name';
 const DEVICE_ID = localStorage.getItem(DEVICE_ID_KEY) || ('dev-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
 localStorage.setItem(DEVICE_ID_KEY, DEVICE_ID);
 
+// Clave pública VAPID. La privada vive SOLO como secreto de la Edge Function de Supabase.
+const PUSH_VAPID_PUBLIC_KEY = 'BJmMd5BZCmFjgJxJjLVse7eElU9s3ag0WlEgRgrOQDxol-HiprqtUW3Sxvwq4tmYZKp53HfqLRh54bbQp278NJg';
+
 let collab = { client:null, channel:null, roomId:localStorage.getItem('frigoplan_room')||'', enabled:false, applyingRemote:false };
 
 function getLocalConfig(){ const c=window.FRIGOPLAN_CONFIG||{}; return {url:(c.SUPABASE_URL||'').trim(),key:(c.SUPABASE_PUBLISHABLE_KEY||'').trim(),defaultRoom:(c.DEFAULT_ROOM||'').trim()}; }
@@ -118,6 +121,8 @@ async function connectCollaboration(roomArg){
       if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){collab.enabled=false;setSyncStatus('error','● Sin conexión');}
     });
     document.getElementById('collab-state').textContent='Sala conectada. Los cambios se compartirán automáticamente.';
+    updatePushButton();
+    syncPushSubscriptionForRoom().catch(()=>{});
     closeModals();
   }catch(e){console.error(e);collab.enabled=false;setSyncStatus('error','● Error de sincronización');document.getElementById('collab-state').textContent='No se pudo conectar: '+(e.message||e);}
 }
@@ -158,6 +163,81 @@ function getChangeDescription(before, after){
   if(JSON.stringify(before.planner||{})!==JSON.stringify(after.planner||{})) changes.push('Planificación semanal modificada');
   if(JSON.stringify(before.recipes||[])!==JSON.stringify(after.recipes||[])) changes.push('Recetas modificadas');
   return changes.length ? changes.slice(0,3).join(' · ') : 'Datos actualizados';
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-(base64String.length%4))%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64); const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
+
+async function getServiceWorkerRegistration(){
+  if(!('serviceWorker' in navigator)) return null;
+  try { return await navigator.serviceWorker.ready; } catch(e){ console.warn('Service Worker no disponible',e); return null; }
+}
+
+async function registerPushSubscription(showFeedback=true){
+  try{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
+      if(showFeedback) alert('Este navegador no permite notificaciones push. En iPhone/iPad, instala FrigoPlan como app desde Safari para poder recibir avisos con la app cerrada.');
+      return false;
+    }
+    if(!collab.client || !collab.roomId){
+      if(showFeedback) alert('Primero conecta FrigoPlan a una sala.');
+      return false;
+    }
+    const permission=Notification.permission==='granted' ? 'granted' : await Notification.requestPermission();
+    if(permission!=='granted'){
+      if(showFeedback) alert('No se ha concedido permiso para las notificaciones.');
+      return false;
+    }
+    const reg=await getServiceWorkerRegistration();
+    if(!reg) throw new Error('No se pudo obtener el Service Worker');
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(PUSH_VAPID_PUBLIC_KEY)});
+    const json=sub.toJSON();
+    const {error}=await collab.client.from('frigoplan_push_subscriptions').upsert({
+      endpoint:json.endpoint,
+      room_id:collab.roomId,
+      device_id:DEVICE_ID,
+      device_name:getDeviceName(),
+      subscription:json,
+      updated_at:new Date().toISOString()
+    },{onConflict:'endpoint'});
+    if(error) throw error;
+    localStorage.setItem('frigoplan_push_enabled','on');
+    updatePushButton();
+    if(showFeedback) alert('🔔 Avisos activados. Recibirás notificaciones aunque FrigoPlan esté cerrada.');
+    return true;
+  }catch(e){
+    console.error('Error activando notificaciones push',e);
+    if(showFeedback) alert('No se pudieron activar los avisos: '+(e.message||e));
+    return false;
+  }
+}
+
+async function disablePushSubscription(){
+  try{
+    const reg=await getServiceWorkerRegistration();
+    const sub=reg&&await reg.pushManager.getSubscription();
+    if(sub && collab.client){ await collab.client.from('frigoplan_push_subscriptions').delete().eq('endpoint',sub.endpoint); await sub.unsubscribe(); }
+  }catch(e){ console.warn('No se pudo desactivar push',e); }
+  localStorage.setItem('frigoplan_push_enabled','off'); updatePushButton();
+}
+
+function updatePushButton(){
+  const b=document.getElementById('push-enable-btn');
+  if(!b) return;
+  const enabled=localStorage.getItem('frigoplan_push_enabled')==='on';
+  b.textContent=enabled?'🔔 Avisos con la app cerrada: ACTIVADOS':'🔔 Activar avisos aunque la app esté cerrada';
+}
+
+async function syncPushSubscriptionForRoom(){
+  if(localStorage.getItem('frigoplan_push_enabled')==='on' && 'Notification' in window && Notification.permission==='granted'){
+    await registerPushSubscription(false);
+  }
 }
 
 function notificationsEnabled(){ return localStorage.getItem('frigoplan_notifications') !== 'off'; }
@@ -220,6 +300,7 @@ function openCollabModal(){
   const c=getLocalConfig();document.getElementById('collab-room').value=collab.roomId||c.defaultRoom||'';
   const nameInput=document.getElementById('collab-device-name'); if(nameInput) nameInput.value=getDeviceName()==='Otro dispositivo'?'':getDeviceName();
   const notifInput=document.getElementById('collab-notifications'); if(notifInput) notifInput.checked=notificationsEnabled();
+  updatePushButton();
   document.getElementById('collab-state').textContent=collabConfigured()?'Introduce el mismo código en todos los dispositivos.':'Falta configurar Supabase en config.js.';
   document.getElementById('collab-modal').classList.add('active');
 }
@@ -252,6 +333,7 @@ async function init() {
     await initCollaboration();
     setTimeout(showUpdateNoticeOnce, 250);
     setupUpdateDetection();
+    updatePushButton();
 }
 
 function saveData() {
