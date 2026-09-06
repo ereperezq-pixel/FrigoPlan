@@ -27,7 +27,77 @@ const mealTypesMap = { 'comida': 'Comida', 'cena': 'Cena' };
 
 let state = JSON.parse(JSON.stringify(defaultState));
 
-function init() {
+let collab = { client:null, channel:null, roomId:localStorage.getItem('frigoplan_room')||'', enabled:false, applyingRemote:false };
+
+function getLocalConfig(){ const c=window.FRIGOPLAN_CONFIG||{}; return {url:(c.SUPABASE_URL||'').trim(),key:(c.SUPABASE_PUBLISHABLE_KEY||'').trim(),defaultRoom:(c.DEFAULT_ROOM||'').trim()}; }
+function collabConfigured(){ const c=getLocalConfig(); return !!(window.supabase&&c.url&&!c.url.includes('TU-PROYECTO')&&c.key&&!c.key.includes('TU_PUBLISHABLE')); }
+function setSyncStatus(type,text){ const e=document.getElementById('sync-status'); if(e){e.className='sync-status '+type;e.textContent=text;} }
+
+async function initCollaboration(){
+  if(!collabConfigured()){setSyncStatus('offline','● Solo local');return;}
+  try{
+    const c=getLocalConfig(); collab.client=window.supabase.createClient(c.url,c.key);
+    const room=collab.roomId||c.defaultRoom;
+    if(room){document.getElementById('collab-room').value=room;await connectCollaboration(room);}
+    else setSyncStatus('offline','● Listo para conectar');
+  }catch(e){console.error(e);setSyncStatus('error','● Error de conexión');}
+}
+
+async function connectCollaboration(roomArg){
+  const input=document.getElementById('collab-room'), room=(roomArg||input.value||'').trim();
+  if(!collabConfigured()){alert('Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en config.js.');return;}
+  if(!room){if(input) input.focus();return;}
+  try{
+    if(!collab.client){const c=getLocalConfig();collab.client=window.supabase.createClient(c.url,c.key);}
+    setSyncStatus('syncing','● Sincronizando...');
+    if(collab.channel) await collab.client.removeChannel(collab.channel);
+    collab.roomId=room;localStorage.setItem('frigoplan_room',room);
+    const {data,error}=await collab.client.from('frigoplan_rooms').select('data').eq('room_id',room).maybeSingle();
+    if(error) throw error;
+    if(data&&data.data) applyRemoteState(data.data); else await pushSharedState();
+    collab.channel=collab.client.channel('frigoplan-'+room).on('postgres_changes',{event:'*',schema:'public',table:'frigoplan_rooms',filter:`room_id=eq.${room}`},p=>{
+      if(p.new&&p.new.data&&!collab.applyingRemote) applyRemoteState(p.new.data);
+    }).subscribe(status=>{
+      if(status==='SUBSCRIBED'){collab.enabled=true;setSyncStatus('online','● Sincronizado');}
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){collab.enabled=false;setSyncStatus('error','● Sin conexión');}
+    });
+    document.getElementById('collab-state').textContent='Sala conectada. Los cambios se compartirán automáticamente.';
+    closeModals();
+  }catch(e){console.error(e);collab.enabled=false;setSyncStatus('error','● Error de sincronización');document.getElementById('collab-state').textContent='No se pudo conectar: '+(e.message||e);}
+}
+
+async function pushSharedState(){
+  if(!collab.client||!collab.roomId||collab.applyingRemote)return;
+  setSyncStatus('syncing','● Guardando...');
+  const {error}=await collab.client.from('frigoplan_rooms').upsert({room_id:collab.roomId,data:state,updated_at:new Date().toISOString()},{onConflict:'room_id'});
+  if(error){setSyncStatus('error','● Error al guardar');throw error;}
+  setSyncStatus('online','● Sincronizado');
+}
+
+function applyRemoteState(d){
+  if(!d||typeof d!=='object')return;
+  collab.applyingRemote=true;
+  state.recipes=Array.isArray(d.recipes)?d.recipes:state.recipes;
+  state.stock=Array.isArray(d.stock)?d.stock:state.stock;
+  state.shoppingList=Array.isArray(d.shoppingList)?d.shoppingList:state.shoppingList;
+  state.planner=d.planner&&typeof d.planner==='object'?d.planner:state.planner;
+  localStorage.setItem('frigoplan_v3',JSON.stringify(state));
+  renderAll();collab.applyingRemote=false;setSyncStatus('online','● Actualizado');
+  setTimeout(()=>setSyncStatus('online','● Sincronizado'),1200);
+}
+
+function openCollabModal(){
+  const c=getLocalConfig();document.getElementById('collab-room').value=collab.roomId||c.defaultRoom||'';
+  document.getElementById('collab-state').textContent=collabConfigured()?'Introduce el mismo código en todos los dispositivos.':'Falta configurar Supabase en config.js.';
+  document.getElementById('collab-modal').classList.add('active');
+}
+async function disconnectCollaboration(){
+  if(collab.channel&&collab.client)await collab.client.removeChannel(collab.channel);
+  collab.channel=null;collab.enabled=false;setSyncStatus('offline','● Solo local');closeModals();
+}
+
+
+async function init() {
     const local = localStorage.getItem('frigoplan_v3');
     if (local) {
         try {
@@ -35,30 +105,24 @@ function init() {
             state.recipes = Array.isArray(parsed.recipes) ? parsed.recipes : defaultState.recipes;
             state.stock = Array.isArray(parsed.stock) ? parsed.stock : defaultState.stock;
             state.shoppingList = Array.isArray(parsed.shoppingList) ? parsed.shoppingList : defaultState.shoppingList;
-            
-            // Migrar planner antiguo (strings) a objeto con raciones si fuera necesario
             state.planner = {};
             if (parsed.planner) {
                 for (let key in parsed.planner) {
                     let val = parsed.planner[key];
-                    if (typeof val === 'string' && val) {
-                        state.planner[key] = { dish: val, servings: 1 };
-                    } else if (val && typeof val === 'object' && val.dish) {
-                        state.planner[key] = val;
-                    }
+                    if (typeof val === 'string' && val) state.planner[key] = { dish: val, servings: 1 };
+                    else if (val && typeof val === 'object' && val.dish) state.planner[key] = val;
                 }
             }
-        } catch(e) {
-            console.error("Error al cargar datos", e);
-            state = JSON.parse(JSON.stringify(defaultState));
-        }
+        } catch(e) { console.error("Error al cargar datos",e); state=JSON.parse(JSON.stringify(defaultState)); }
     }
     renderAll();
+    await initCollaboration();
 }
 
 function saveData() {
     localStorage.setItem('frigoplan_v3', JSON.stringify(state));
     renderAll();
+    if (collab.enabled && !collab.applyingRemote) pushSharedState().catch(()=>{});
 }
 
 function resetApp() {

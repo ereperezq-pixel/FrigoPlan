@@ -14,7 +14,7 @@
             <span class="logo-icon">🥗</span>
             <h1>FrigoPlan</h1>
         </div>
-        <button onclick="resetApp()" class="btn btn-sm btn-danger" style="margin-top: 10px; background: rgba(0,0,0,0.2);">🔄 Resetear Datos</button>
+        <div class="header-actions"><span id="sync-status" class="sync-status offline">● Solo local</span><button onclick="openCollabModal()" class="btn btn-sm header-collab-btn">👥 Colaborar</button><button onclick="resetApp()" class="btn btn-sm btn-danger" style="background:rgba(0,0,0,0.2);">🔄 Resetear Datos</button></div>
     </header>
 
     <main class="container">
@@ -146,6 +146,8 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<div id="collab-modal" class="modal"><div class="modal-content collab-modal-content"><div class="modal-header"><h3>👥 FrigoPlan colaborativo</h3><span class="close-btn" onclick="closeModals()">&times;</span></div><p class="collab-help">Usa el mismo código de familia en todos los dispositivos. Los cambios de stock, compra, recetas y planificación se sincronizarán.</p><div class="form-group"><label>Código de familia / sala</label><input type="text" id="collab-room" placeholder="Ej.: familia-cartes-2026"></div><div id="collab-state" class="collab-state"></div><div class="collab-actions"><button type="button" class="btn btn-primary" onclick="connectCollaboration()">🔗 Conectar y sincronizar</button><button type="button" class="btn" onclick="disconnectCollaboration()">📱 Solo este dispositivo</button></div><p class="collab-note">El código es la llave de acceso a esa sala. Usa uno largo y difícil de adivinar.</p></div></div></body>
 </html>
