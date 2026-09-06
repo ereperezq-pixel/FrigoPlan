@@ -16,3 +16,9 @@ No pongas nunca una `service_role` o `secret key` en `config.js`.
 
 ### Avisos entre dispositivos
 La v5 muestra un aviso dentro de FrigoPlan cuando otro dispositivo conectado a la misma sala cambia stock, compras, planificación o recetas. Puedes activar además las notificaciones del navegador desde el cuadro Colaborar. Los avisos entre dispositivos requieren que ambos tengan FrigoPlan abierta o activa; las notificaciones push con la app completamente cerrada requieren una infraestructura Web Push adicional.
+
+
+## v6 — avisos entre dispositivos
+Esta versión usa Supabase Realtime Broadcast para enviar el aviso instantáneo a los demás terminales de la misma sala. La sincronización de datos por Postgres se mantiene como respaldo.
+
+Para probarlo, abre FrigoPlan en dos terminales con el mismo código de sala, asigna un nombre distinto a cada uno y modifica stock o compras desde uno. El otro debe mostrar el aviso.

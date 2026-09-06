@@ -77,6 +77,7 @@ const mealTypesMap = { 'comida': 'Comida', 'cena': 'Cena' };
 
 let state = JSON.parse(JSON.stringify(defaultState));
 let lastSavedState = JSON.parse(JSON.stringify(state));
+const APP_VERSION = 'v6';
 const DEVICE_ID_KEY = 'frigoplan_device_id';
 const DEVICE_NAME_KEY = 'frigoplan_device_name';
 const DEVICE_ID = localStorage.getItem(DEVICE_ID_KEY) || ('dev-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -111,9 +112,17 @@ async function connectCollaboration(roomArg){
     const {data,error}=await collab.client.from('frigoplan_rooms').select('data').eq('room_id',room).maybeSingle();
     if(error) throw error;
     if(data&&data.data) applyRemoteState(data.data, true); else await pushSharedState('Sala creada y datos iniciales compartidos');
-    collab.channel=collab.client.channel('frigoplan-'+room).on('postgres_changes',{event:'*',schema:'public',table:'frigoplan_rooms',filter:`room_id=eq.${room}`},p=>{
+    collab.channel=collab.client.channel('frigoplan-'+room, {
+      config: { broadcast: { self: false, ack: true } }
+    })
+    .on('broadcast',{event:'state-change'}, ({payload})=>{
+      if(payload&&payload.data&&!collab.applyingRemote) applyRemoteState(payload.data);
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'frigoplan_rooms',filter:`room_id=eq.${room}`},p=>{
+      // El Postgres Changes mantiene la sincronización incluso si Broadcast no está disponible.
       if(p.new&&p.new.data&&!collab.applyingRemote) applyRemoteState(p.new.data);
-    }).subscribe(status=>{
+    })
+    .subscribe(status=>{
       if(status==='SUBSCRIBED'){collab.enabled=true;setSyncStatus('online','● Sincronizado');}
       if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){collab.enabled=false;setSyncStatus('error','● Sin conexión');}
     });
@@ -196,6 +205,13 @@ async function pushSharedState(eventText='Datos actualizados'){
   const payload={...state,_meta:{sourceId:DEVICE_ID,deviceName:getDeviceName(),event:eventText,ts:Date.now()}};
   const {error}=await collab.client.from('frigoplan_rooms').upsert({room_id:collab.roomId,data:payload,updated_at:new Date().toISOString()},{onConflict:'room_id'});
   if(error){setSyncStatus('error','● Error al guardar');throw error;}
+  // Broadcast es el canal específico para avisos instantáneos entre terminales.
+  // No sustituye a la base de datos: simplemente avisa a los demás dispositivos.
+  if(collab.channel){
+    try{
+      await collab.channel.send({type:'broadcast',event:'state-change',payload:{data:payload}});
+    }catch(e){ console.warn('Broadcast de FrigoPlan no disponible:',e); }
+  }
   setSyncStatus('online','● Sincronizado');
 }
 
@@ -204,6 +220,8 @@ function applyRemoteState(d, silent=false){
   const meta=d._meta||{};
   const isOtherDevice=meta.sourceId && meta.sourceId!==DEVICE_ID;
   const event=meta.event||'Datos actualizados';
+  const actionId=meta.ts ? `${meta.sourceId||''}-${meta.ts}` : '';
+  if(isOtherDevice && actionId && localStorage.getItem('frigoplan_last_remote_action')===actionId) return;
   collab.applyingRemote=true;
   state.recipes=Array.isArray(d.recipes)?d.recipes:state.recipes;
   state.stock=Array.isArray(d.stock)?d.stock:state.stock;
@@ -212,7 +230,10 @@ function applyRemoteState(d, silent=false){
   localStorage.setItem('frigoplan_v3',JSON.stringify(state));
   lastSavedState=cloneData(state);
   renderAll();collab.applyingRemote=false;setSyncStatus('online','● Actualizado');
-  if(isOtherDevice && !silent) showRemoteNotification(`${meta.deviceName||'Otro dispositivo'}: ${event}`);
+  if(isOtherDevice && !silent){
+    if(actionId) localStorage.setItem('frigoplan_last_remote_action',actionId);
+    showRemoteNotification(`${meta.deviceName||'Otro dispositivo'}: ${event}`);
+  }
   setTimeout(()=>setSyncStatus('online','● Sincronizado'),1200);
 }
 
